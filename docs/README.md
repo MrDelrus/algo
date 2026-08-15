@@ -1,21 +1,25 @@
-# Documentation
+# Documentation index
 
-One page per component, in English, under the area it belongs to.
+One page per component. Every page has the same sections: summary, complexity, API, usage, notes, related.
 
-| Area | Namespace | Alias |
+## Data structures — `algo::data_structures`, alias `ds`
+
+| Component | Documentation | Benchmark |
 | --- | --- | --- |
-| [graphs/](graphs/) | `algo::graphs` | `gr` |
-| [structures/](structures/) | `algo::data_structures` | `ds` |
+| `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [results](../benchmarks/structures/segment_tree.md) |
 
-## Page format
+## Graphs — `algo::graphs`, alias `gr`
 
-Every component page follows the same shape:
+| Component | Documentation | Benchmark |
+| --- | --- | --- |
+| _none yet_ | | |
 
-1. **Summary** — one sentence on what it solves.
-2. **Complexity** — build / query / update, time and memory.
-3. **API** — signatures, parameter semantics, index conventions.
-4. **Usage** — a short, realistic snippet.
-5. **Notes** — invariants, overflow and precision limits, when *not* to use it.
-6. **Related** — links to sibling pages.
+## Conventions
 
-Conventions that hold across all pages unless a page says otherwise: vertices and array positions are 0-indexed, ranges are half-open `[left, right)`, and values are `std::int64_t`.
+These hold on every page unless it says otherwise.
+
+- Positions and vertices are 0-indexed; ranges are half-open `[left, right)`.
+- Values and weights are `std::int64_t`.
+- Structures own their storage and validate their arguments, throwing `std::out_of_range` or `std::invalid_argument` on misuse.
+- Anything parameterized by an operation takes a monoid — `value_type`, `identity()`, `combine(left, right)` — with an explicit identity, never a default-constructed one.
+- Graph traversals are iterative: a Codeforces stack does not survive 2e5 frames.

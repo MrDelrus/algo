@@ -9,15 +9,20 @@ A single-file competitive programming library targeting Codeforces. `main.cpp` i
 ## Layout
 
 ```
-main.cpp                  submission file — template + algo library + solve/main
-.clang-format             Google style, two-space indent, 100 columns
-scripts/format.sh         formats library code only
-docs/graphs/              docs for algo::graphs
-docs/structures/          docs for algo::data_structures
-benchmarks/               deterministic performance tests + results
-.github/workflows/ci.yml  build, benchmarks, formatting, style rules
-MEMORY.md                 untracked, personal
+main.cpp                     submission file — template + algo library + solve/main
+.clang-format                Google style, two-space indent, 100 columns
+scripts/format.sh            formats library code only
+scripts/extract_library.sh   lifts namespace algo out of main.cpp into a header
+docs/README.md               the index of every component — the only index
+docs/structures/             one page per data structure
+docs/graphs/                 one page per graph algorithm
+benchmarks/structures/       .cpp that measures + .md that records the numbers
+benchmarks/graphs/
+.github/workflows/ci.yml     build, benchmarks, formatting, style rules
+MEMORY.md                    untracked, personal
 ```
+
+`docs/README.md` is the single index. The root `README.md` points at it and stays short; there are no per-area index files, because three indexes drift apart by the third component.
 
 ## Namespaces
 
@@ -37,7 +42,8 @@ Once components exist, short aliases are declared in `main.cpp` below the librar
 - **0-indexed** everywhere unless a structure is inherently 1-indexed (Fenwick internals); the public API stays 0-indexed regardless.
 - **Comments are for invariants and complexity**, not for restating code. Each public component carries a one-line header comment: what it does plus its complexities.
 - **No `using namespace std;` inside `namespace algo`** — the library must survive being pasted anywhere. `main.cpp`'s top-level template already has it.
-- Prefer flat `std::vector` storage and indices over pointer-based nodes. No exceptions, no RTTI, no virtual dispatch in hot paths.
+- Prefer flat `std::vector` storage and indices over pointer-based nodes. No RTTI, no virtual dispatch.
+- **Structures validate their arguments and throw** `std::out_of_range` or `std::invalid_argument` on misuse. A satisfied check is one predicted branch; the message is built only on the failing path. Debugging an index bug at speed is worth far more than the branch costs.
 - Correctness first, then constant factor. A correctness invariant is never traded for speed without the trade being written down in the doc page's Notes.
 
 ## Markdown style
@@ -46,7 +52,7 @@ Paragraphs are single lines. Never hard-wrap prose at a column — let the edito
 
 ## Documentation
 
-Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named after the component in `kebab-case.md`, with these sections:
+Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named exactly after the component — `segment_tree.md`, matching the type it documents — with these sections:
 
 1. **Summary** — one sentence.
 2. **Complexity** — build / query / update, time and memory.
@@ -55,11 +61,11 @@ Every component has one Markdown page under `docs/graphs/` or `docs/structures/`
 5. **Notes** — invariants, precision limits, overflow risks, when *not* to use it.
 6. **Related** — links to sibling pages.
 
-A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and the `docs/<area>/README.md` index table stays in sync.
+A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 
 ## Benchmarks
 
-Rules live in `benchmarks/README.md`. The load-bearing ones: benchmarks are fully deterministic (no `rng`, no `chrono` seeding, fixed-seed data generation), `n = 2e5` is the standard size for O(n log n) structures, query results are accumulated into a printed checksum so the optimizer cannot delete the measured work, and results are always reported with machine, compiler, and flags.
+`benchmarks/` mirrors `docs/`: per component a `.cpp` that measures and a `.md` that describes each scenario and records its numbers — total first, then the average cost of every operation on its own. Rules live in `benchmarks/README.md`; run them with `benchmarks/run.sh`, which pins resources in a container.
 
 An std component is only replaced by a hand-written one when a benchmark shows at least a 2x win.
 

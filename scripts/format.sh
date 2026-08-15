@@ -40,7 +40,7 @@ else
 fi
 
 shopt -s nullglob
-benchmarks=(benchmarks/*.cpp)
+benchmarks=(benchmarks/*/*.cpp)
 if ((${#benchmarks[@]} > 0)); then
   clang-format "${mode[@]}" "${benchmarks[@]}"
 fi
