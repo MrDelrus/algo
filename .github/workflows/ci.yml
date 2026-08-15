@@ -19,11 +19,8 @@ jobs:
       - name: build (submission mode)
         run: g++ -std=c++20 -O2 -Wall -Wextra -Werror -o /tmp/main main.cpp
 
-      - name: build (local debug mode)
-        run: g++ -std=c++20 -O2 -Wall -Wextra -Werror -D LOCAL -o /tmp/main_local main.cpp
-
       - name: build with sanitizers
-        run: g++ -std=c++20 -g -Wall -Wextra -Werror -fsanitize=address,undefined -D LOCAL -o /tmp/main_sanitized main.cpp
+        run: g++ -std=c++20 -g -Wall -Wextra -Werror -fsanitize=address,undefined -o /tmp/main_sanitized main.cpp
 
       - name: smoke run
         run: printf '0\n' | /tmp/main
@@ -58,14 +55,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
       - name: check formatting
-        run: |
-          shopt -s nullglob globstar
-          sources=(main.cpp benchmarks/**/*.cpp)
-          if [ ${#sources[@]} -eq 0 ]; then
-            echo "nothing to check"
-            exit 0
-          fi
-          clang-format --dry-run --Werror "${sources[@]}"
+        run: scripts/format.sh --check
 
   style:
     name: style rules
@@ -73,14 +63,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Library code must not use built-in integer types. The competitive template at the
-      # top of main.cpp is exempt, so only the library region is scanned.
+      # Library code must not use built-in integer types. The competitive template around
+      # it is exempt, so only the body of `namespace algo` is scanned.
       - name: no built-in integer types in library code
         run: |
           shopt -s nullglob
           sources=(benchmarks/*.cpp)
-          library=$(sed -n '/STANDARD ALGORITHMS/,/CODE HERE/p' main.cpp)
-          printf '%s\n' "$library" > /tmp/library_region.cpp
+          sed -n '/^namespace algo {$/,/^}  \/\/ namespace algo$/p' main.cpp > /tmp/library_region.cpp
+          if [ ! -s /tmp/library_region.cpp ]; then
+            echo "::error::could not locate the 'namespace algo' block in main.cpp"
+            exit 1
+          fi
           if grep -nE '(^|[^_[:alnum:]])(long long|unsigned|short|\bint\b)([^_[:alnum:]]|$)' /tmp/library_region.cpp "${sources[@]}"; then
             echo "::error::built-in integer types are banned; use std::int64_t / std::int32_t / std::size_t / std::uint64_t"
             exit 1

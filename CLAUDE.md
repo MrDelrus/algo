@@ -31,7 +31,7 @@ Namespace aliases are declared with `namespace gr = algo::graphs;` (not `using`)
 - **Repository language is English** — code, comments, docs, commit messages. No Russian in tracked files.
 - **Self-contained**: a component must compile after copy-pasting it plus its declared dependencies. State dependencies explicitly in the doc page.
 - **Formatting**: clang-format, Google style, two-space indent. The tracked `.clang-format` is authoritative — run `clang-format -i` on anything you touch.
-- **`snake_case` for everything**: classes, methods, free functions, namespaces, variables, constants. No PascalCase in the library — it should read like std. Private members keep a trailing underscore. Template parameters are descriptive and lowercase (`value_type`, `operation`), never single letters.
+- **`snake_case` for everything**: classes, methods, free functions, namespaces, variables, constants. No PascalCase in the library — it should read like std. Private members carry a **leading** underscore (`_data`, `_size`). Template parameters are descriptive and lowercase (`value_type`, `operation`), never single letters.
 - **No abbreviations, anywhere**: `segment_tree` not `seg_tree`, `fenwick` not `bit`, `left`/`right` not `l`/`r`. Applies to types, methods, parameters, and locals alike. The `main.cpp` competitive template (`pb`, `all`, `dbg`) is the sole exemption — it is round shorthand, not library code.
 - **Built-in integer types are banned in the library**: no `int`, no `long long`, no `unsigned`. Use `std::int64_t` by default, `std::int32_t` only where the bound is proven and memory matters, `std::size_t` for sizes, `std::uint64_t` for hashing and bit manipulation.
 - **0-indexed** everywhere unless a structure is inherently 1-indexed (Fenwick internals); the public API stays 0-indexed regardless.
@@ -77,19 +77,23 @@ Components are added in a fixed order, never out of order: the user picks the co
 
 ```bash
 g++ -std=c++20 -O2 -Wall -Wextra -o /tmp/main main.cpp
-g++ -std=c++20 -g -fsanitize=address,undefined -D LOCAL -o /tmp/main_dbg main.cpp
+g++ -std=c++20 -g -fsanitize=address,undefined -o /tmp/main_dbg main.cpp
 ```
-
-`-D LOCAL` enables `dbg(...)` and the container stream operators in `main.cpp`; both are inert on Codeforces.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on every push and pull request, and must stay green:
 
-- **build** — `main.cpp` in submission mode, `-D LOCAL` mode, and under ASan/UBSan, all with `-Werror`, plus a smoke run.
+- **build** — `main.cpp` with `-Werror`, plus an ASan/UBSan build and a smoke run.
 - **benchmarks** — every `benchmarks/*.cpp` compiles with `-Werror`.
-- **clang-format** — `--dry-run --Werror` over `main.cpp` and the benchmarks. Run `clang-format -i` before committing; `main.cpp` is formatted too, template and all.
-- **style rules** — greps the library region of `main.cpp` (between the `STANDARD ALGORITHMS` and `CODE HERE` markers) and the benchmarks for built-in integer types and fails if any appear. Keep those two marker comments intact; the check depends on them.
+- **clang-format** — `scripts/format.sh --check`.
+- **style rules** — extracts the `namespace algo { ... }` block from `main.cpp` and greps it, plus the benchmarks, for built-in integer types.
+
+## Formatting boundary in main.cpp
+
+Formatting rules apply **only inside `namespace algo`**. The competitive template around it — includes, macros, aliases, `solve()`, `main()` — is hand-arranged and must stay exactly as written; the blank lines inside `solve()` are deliberate typing room, not slop to clean up.
+
+Never run bare `clang-format` on `main.cpp` — it would reformat the template. Run `scripts/format.sh` instead: it locates the namespace body by the lines `namespace algo {` and `}  // namespace algo` and passes only that line range to clang-format, then formats the benchmarks whole. Both those lines must stay exactly as they are — the formatter and the CI style check both key off them, and the script fails loudly if either is missing or duplicated.
 
 ## Reference material
 
