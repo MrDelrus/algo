@@ -1,10 +1,11 @@
 // Correctness tests for algo::data_structures::segment_tree.
 //
 // Two layers. The small layer is exhaustive: every size from 0 to 32, every range, every
-// position, every starting point for the descent, all compared against a linear fold. Sizes
-// around powers of two get particular attention, because the leaf count is padded there and an
-// off-by-one in the padding would hide in exactly those sizes. The large layer runs sizes near
-// 1e3 from a deterministic generator and checks each answer against an obvious O(n) scan.
+// position, all compared against a linear fold, with the whole tree re-verified after every
+// single update. Sizes around powers of two get particular attention, because the leaf count is
+// padded there and an off-by-one in the padding would hide in exactly those sizes. The large
+// layer runs sizes near 1e3 from a deterministic generator and checks each answer against an
+// obvious O(n) scan, which makes that section quadratic overall.
 //
 // Everything is deterministic: fixed-seed counter-based splitmix64, no std distribution, so a
 // failure reproduces byte for byte on any machine.
@@ -51,33 +52,6 @@ typename monoid::value_type linear_fold(const std::vector<typename monoid::value
   return folded;
 }
 
-// The obvious O(n^2) descent: grow the range one element at a time until the predicate breaks.
-template <typename monoid, typename predicate>
-std::size_t linear_find_right(const std::vector<typename monoid::value_type>& values,
-                              std::size_t left, predicate is_good) {
-  std::size_t answer = left;
-  for (std::size_t right = left; right <= values.size(); ++right) {
-    if (!is_good(linear_fold<monoid>(values, left, right))) {
-      break;
-    }
-    answer = right;
-  }
-  return answer;
-}
-
-template <typename monoid, typename predicate>
-std::size_t linear_find_left(const std::vector<typename monoid::value_type>& values,
-                             std::size_t right, predicate is_good) {
-  std::size_t answer = right;
-  for (std::size_t left = right + 1; left-- > 0;) {
-    if (!is_good(linear_fold<monoid>(values, left, right))) {
-      break;
-    }
-    answer = left;
-  }
-  return answer;
-}
-
 std::string describe(std::size_t size, std::size_t first, std::size_t second) {
   return "n=" + std::to_string(size) + " [" + std::to_string(first) + ", " +
          std::to_string(second) + ")";
@@ -91,8 +65,8 @@ void check_against_linear(const algo::data_structures::segment_tree<monoid>& tre
   std::size_t size = values.size();
   for (std::size_t left = 0; left <= size; ++left) {
     for (std::size_t right = left; right <= size; ++right) {
-      check_equal(tree.query(left, right) == linear_fold<monoid>(values, left, right), true,
-                  note + " query " + describe(size, left, right));
+      check(tree.query(left, right) == linear_fold<monoid>(values, left, right),
+            note + " query " + describe(size, left, right));
     }
   }
   for (std::size_t position = 0; position < size; ++position) {
@@ -103,9 +77,8 @@ void check_against_linear(const algo::data_structures::segment_tree<monoid>& tre
   check(tree.query_all() == tree.query(0, size), note + " query_all equals query(0, n)");
 }
 
-template <typename monoid, typename value_generator, typename predicate_generator>
-void exhaustive_small(const std::string& name, value_generator make_value,
-                      predicate_generator make_predicate) {
+template <typename monoid, typename value_generator>
+void exhaustive_small(const std::string& name, value_generator make_value) {
   testing::section(name + " / exhaustive n <= " + std::to_string(exhaustive_limit));
   testing::random_source source(seed);
 
@@ -118,9 +91,9 @@ void exhaustive_small(const std::string& name, value_generator make_value,
     algo::data_structures::segment_tree<monoid> tree(values);
     check_against_linear<monoid>(tree, values, name + " fresh");
 
-    // Both update flavours, with the whole tree re-verified after each one. Slow on purpose:
-    // at these sizes a full re-check costs nothing and catches an ancestor that was updated
-    // along the wrong path.
+    // Both update flavours, with the whole tree re-verified after each one. Slow on purpose: at
+    // these sizes a full re-check costs nothing and catches an ancestor updated along the wrong
+    // path, which a spot check on a single range would miss.
     for (std::size_t round = 0; round < 3 * size; ++round) {
       std::size_t position = source.below(size);
       typename monoid::value_type value = make_value(source);
@@ -132,21 +105,6 @@ void exhaustive_small(const std::string& name, value_generator make_value,
         values[position] = monoid::combine(values[position], value);
       }
       check_against_linear<monoid>(tree, values, name + " after update");
-    }
-
-    // The descent, from every starting point, against the linear scan.
-    for (std::size_t attempt = 0; attempt < 4; ++attempt) {
-      auto is_good = make_predicate(source);
-      for (std::size_t left = 0; left <= size; ++left) {
-        check_equal(
-            tree.find_right(left, is_good), linear_find_right<monoid>(values, left, is_good),
-            name + " find_right n=" + std::to_string(size) + " left=" + std::to_string(left));
-      }
-      for (std::size_t right = 0; right <= size; ++right) {
-        check_equal(
-            tree.find_left(right, is_good), linear_find_left<monoid>(values, right, is_good),
-            name + " find_left n=" + std::to_string(size) + " right=" + std::to_string(right));
-      }
     }
   }
 }
@@ -265,7 +223,7 @@ void monoid_specific_behaviour() {
 }
 
 // Order matters: with a non-commutative monoid, a query that folds its two halves the wrong way
-// round produces a reversed string rather than a wrong number, which is unmissable.
+// round produces a reversed string rather than a plausible number, which is unmissable.
 void non_commutative_order() {
   testing::section("non-commutative order");
 
@@ -279,6 +237,7 @@ void non_commutative_order() {
   check_equal(tree.query_all(), std::string("abcdefghijklmnopqrst"), "the root holds the order");
   check_equal(tree.query(3, 9), std::string("defghi"), "a middle range keeps its order");
   check_equal(tree.query(19, 20), std::string("t"), "the last letter alone");
+  check_equal(tree.query(0, 1), std::string("a"), "the first letter alone");
 
   tree.set(5, "F");
   check_equal(tree.query(3, 9), std::string("deFghi"), "an assignment keeps the surrounding order");
@@ -286,17 +245,15 @@ void non_commutative_order() {
   check_equal(tree.query(0, 3), std::string("a!bc"),
               "combine_at appends on the right of the old value");
 
-  std::size_t bound =
-      tree.find_right(2, [](const std::string& folded) { return folded.size() <= 4; });
-  check_equal(bound, std::size_t(6), "find_right respects the fold, not the element count");
+  // Ranges straddling the middle of the tree are where a swapped fold shows up.
+  check_equal(tree.query(7, 13), std::string("hijklm"), "a range crossing the tree's midpoint");
+  check_equal(tree.query(15, 20), std::string("pqrst"), "a range inside the right half");
 }
 
 void exception_paths() {
   testing::section("exception paths");
 
   ds::sum_segment_tree tree(std::vector<std::int64_t>{1, 2, 3, 4, 5});
-  auto always = [](std::int64_t) { return true; };
-  auto never = [](std::int64_t) { return false; };
 
   check_throws<std::out_of_range>([&] { return tree.get(5); }, "get at n");
   check_throws<std::out_of_range>([&] { return tree.get(6); }, "get past n");
@@ -306,14 +263,8 @@ void exception_paths() {
   check_throws<std::out_of_range>([&] { tree.combine_at(5, 0); }, "combine_at at n");
   check_throws<std::out_of_range>([&] { return tree.query(0, 6); }, "query reaching past n");
   check_throws<std::out_of_range>([&] { return tree.query(6, 6); },
-                                  "empty query beyond the end still out of range");
+                                  "empty query beyond the end is still out of range");
   check_throws<std::out_of_range>([&] { return tree.query(4, 2); }, "reversed query");
-  check_throws<std::out_of_range>([&] { return tree.find_right(6, always); }, "find_right past n");
-  check_throws<std::out_of_range>([&] { return tree.find_left(6, always); }, "find_left past n");
-  check_throws<std::invalid_argument>([&] { return tree.find_right(0, never); },
-                                      "find_right with a predicate rejecting identity");
-  check_throws<std::invalid_argument>([&] { return tree.find_left(5, never); },
-                                      "find_left with a predicate rejecting identity");
 
   ds::sum_segment_tree empty_tree;
   check_throws<std::out_of_range>([&] { return empty_tree.get(0); }, "get on an empty tree");
@@ -326,8 +277,6 @@ void exception_paths() {
   check_does_not_throw([&] { return tree.query(2, 2); }, "an empty range in the middle");
   check_does_not_throw([&] { return tree.get(4); }, "the last valid position");
   check_does_not_throw([&] { tree.set(4, 0); }, "set at the last valid position");
-  check_does_not_throw([&] { return tree.find_right(5, always); }, "find_right starting at n");
-  check_does_not_throw([&] { return tree.find_left(0, always); }, "find_left ending at zero");
   check_does_not_throw([&] { return empty_tree.query(0, 0); }, "the empty range on an empty tree");
 
   // A rejected call must leave the structure untouched.
@@ -339,45 +288,8 @@ void exception_paths() {
   check_equal(guarded.query_all(), std::int64_t(6), "a rejected set changes nothing");
 }
 
-void descent_edge_cases() {
-  testing::section("descent edge cases");
-
-  std::vector<std::int64_t> values = {2, 2, 2, 2, 2};
-  ds::sum_segment_tree tree(values);
-  auto always = [](std::int64_t) { return true; };
-
-  check_equal(tree.find_right(0, always), std::size_t(5),
-              "a predicate that never breaks reaches n");
-  check_equal(tree.find_left(5, always), std::size_t(0),
-              "a predicate that never breaks reaches zero");
-  check_equal(tree.find_right(5, always), std::size_t(5), "starting at n returns n");
-  check_equal(tree.find_left(0, always), std::size_t(0), "ending at zero returns zero");
-
-  // A predicate that breaks on the very first element: the answer is the empty range.
-  auto tiny = [](std::int64_t sum) { return sum < 1; };
-  check_equal(tree.find_right(0, tiny), std::size_t(0),
-              "breaking immediately yields an empty range");
-  check_equal(tree.find_left(5, tiny), std::size_t(5),
-              "breaking immediately yields an empty range on the left");
-
-  // Exact boundary: the sum of three elements is exactly the limit, four exceeds it.
-  auto exactly_six = [](std::int64_t sum) { return sum <= 6; };
-  check_equal(tree.find_right(0, exactly_six), std::size_t(3), "the limit is inclusive");
-  check_equal(tree.find_left(5, exactly_six), std::size_t(2), "the limit is inclusive leftwards");
-
-  ds::sum_segment_tree single(std::vector<std::int64_t>{10});
-  check_equal(single.find_right(0, [](std::int64_t sum) { return sum <= 9; }), std::size_t(0),
-              "a single element that does not fit");
-  check_equal(single.find_right(0, [](std::int64_t sum) { return sum <= 10; }), std::size_t(1),
-              "a single element that exactly fits");
-
-  ds::sum_segment_tree nothing;
-  check_equal(nothing.find_right(0, always), std::size_t(0), "descent on an empty tree");
-  check_equal(nothing.find_left(0, always), std::size_t(0), "descent on an empty tree leftwards");
-}
-
-// Sizes near 1e3 from a deterministic generator, every answer checked against the obvious
-// O(n) scan, which makes the whole section O(n^2).
+// Sizes near 1e3 from a deterministic generator, every answer checked against the obvious O(n)
+// scan, which makes the whole section quadratic.
 void large_against_quadratic() {
   testing::section("large, checked against the quadratic reference");
   const std::vector<std::size_t> sizes = {997, 1000, 1024, 1025};
@@ -389,21 +301,12 @@ void large_against_quadratic() {
       values[index] = static_cast<std::int64_t>(source.below(2000)) - 1000;
     }
 
-    // Descent needs a monotone predicate, and `sum <= limit` is monotone only while the
-    // values cannot pull the sum back down. Signed data therefore gets queried but never
-    // descended; a separate non-negative array carries the descent checks.
-    std::vector<std::int64_t> magnitudes(size);
-    for (std::size_t index = 0; index < size; ++index) {
-      magnitudes[index] = static_cast<std::int64_t>(source.below(1000));
-    }
-
     ds::sum_segment_tree sums(values);
     ds::min_segment_tree minimums(values);
     ds::max_segment_tree maximums(values);
-    ds::sum_segment_tree ascending(magnitudes);
 
-    for (std::size_t round = 0; round < 400; ++round) {
-      std::size_t choice = source.below(4);
+    for (std::size_t round = 0; round < 500; ++round) {
+      std::size_t choice = source.below(3);
 
       if (choice == 0) {
         std::size_t position = source.below(size);
@@ -422,6 +325,8 @@ void large_against_quadratic() {
         values[position] += value;
         minimums.set(position, values[position]);
         maximums.set(position, values[position]);
+        check_equal(sums.get(position), values[position],
+                    "combine_at at n=" + std::to_string(size));
         continue;
       }
 
@@ -433,92 +338,56 @@ void large_against_quadratic() {
         right = swapped;
       }
 
-      if (choice == 2) {
-        std::int64_t expected_sum = 0;
-        std::int64_t expected_min = std::numeric_limits<std::int64_t>::max();
-        std::int64_t expected_max = std::numeric_limits<std::int64_t>::lowest();
-        for (std::size_t index = left; index < right; ++index) {
-          expected_sum += values[index];
-          expected_min = std::min(expected_min, values[index]);
-          expected_max = std::max(expected_max, values[index]);
-        }
-        check_equal(sums.query(left, right), expected_sum, "sum " + describe(size, left, right));
-        check_equal(minimums.query(left, right), expected_min,
-                    "min " + describe(size, left, right));
-        check_equal(maximums.query(left, right), expected_max,
-                    "max " + describe(size, left, right));
-        continue;
+      std::int64_t expected_sum = 0;
+      std::int64_t expected_min = std::numeric_limits<std::int64_t>::max();
+      std::int64_t expected_max = std::numeric_limits<std::int64_t>::lowest();
+      for (std::size_t index = left; index < right; ++index) {
+        expected_sum += values[index];
+        expected_min = std::min(expected_min, values[index]);
+        expected_max = std::max(expected_max, values[index]);
       }
-
-      // Descent against the same linear scan the small layer uses.
-      std::int64_t limit = static_cast<std::int64_t>(source.below(200000));
-      auto is_good = [limit](std::int64_t folded) { return folded <= limit; };
-      check_equal(ascending.find_right(left, is_good),
-                  linear_find_right<ds::sum_monoid<std::int64_t>>(magnitudes, left, is_good),
-                  "find_right n=" + std::to_string(size) + " left=" + std::to_string(left));
-      check_equal(ascending.find_left(right, is_good),
-                  linear_find_left<ds::sum_monoid<std::int64_t>>(magnitudes, right, is_good),
-                  "find_left n=" + std::to_string(size) + " right=" + std::to_string(right));
+      check_equal(sums.query(left, right), expected_sum, "sum " + describe(size, left, right));
+      check_equal(minimums.query(left, right), expected_min, "min " + describe(size, left, right));
+      check_equal(maximums.query(left, right), expected_max, "max " + describe(size, left, right));
     }
 
     check_equal(sums.query_all(), std::accumulate(values.begin(), values.end(), std::int64_t(0)),
                 "the root after the whole run, n=" + std::to_string(size));
+    check_equal(minimums.query_all(), *std::min_element(values.begin(), values.end()),
+                "the min root after the whole run, n=" + std::to_string(size));
+    check_equal(maximums.query_all(), *std::max_element(values.begin(), values.end()),
+                "the max root after the whole run, n=" + std::to_string(size));
   }
 }
 
 }  // namespace
 
 int main() {
-  exhaustive_small<ds::sum_monoid<std::int64_t>>(
-      "sum",
-      [](testing::random_source& source) { return static_cast<std::int64_t>(source.below(100)); },
-      [](testing::random_source& source) {
-        std::int64_t limit = static_cast<std::int64_t>(source.below(400));
-        return [limit](std::int64_t folded) { return folded <= limit; };
-      });
+  exhaustive_small<ds::sum_monoid<std::int64_t>>("sum", [](testing::random_source& source) {
+    return static_cast<std::int64_t>(source.below(100)) - 50;
+  });
 
-  exhaustive_small<ds::min_monoid<std::int64_t>>(
-      "min",
-      [](testing::random_source& source) { return static_cast<std::int64_t>(source.below(50)); },
-      [](testing::random_source& source) {
-        std::int64_t bound = static_cast<std::int64_t>(source.below(50));
-        return [bound](std::int64_t folded) { return folded >= bound; };
-      });
+  exhaustive_small<ds::min_monoid<std::int64_t>>("min", [](testing::random_source& source) {
+    return static_cast<std::int64_t>(source.below(50)) - 25;
+  });
 
-  exhaustive_small<ds::max_monoid<std::int64_t>>(
-      "max",
-      [](testing::random_source& source) { return static_cast<std::int64_t>(source.below(50)); },
-      [](testing::random_source& source) {
-        std::int64_t bound = static_cast<std::int64_t>(source.below(50));
-        return [bound](std::int64_t folded) { return folded <= bound; };
-      });
+  exhaustive_small<ds::max_monoid<std::int64_t>>("max", [](testing::random_source& source) {
+    return static_cast<std::int64_t>(source.below(50)) - 25;
+  });
 
-  exhaustive_small<ds::gcd_monoid<std::int64_t>>(
-      "gcd",
-      [](testing::random_source& source) {
-        return static_cast<std::int64_t>(1 + source.below(60));
-      },
-      [](testing::random_source& source) {
-        std::int64_t divisor = static_cast<std::int64_t>(1 + source.below(4));
-        return [divisor](std::int64_t folded) { return folded % divisor == 0; };
-      });
+  exhaustive_small<ds::gcd_monoid<std::int64_t>>("gcd", [](testing::random_source& source) {
+    return static_cast<std::int64_t>(1 + source.below(60));
+  });
 
-  exhaustive_small<concat_monoid>(
-      "concat",
-      [](testing::random_source& source) {
-        return std::string(1, static_cast<char>('a' + source.below(4)));
-      },
-      [](testing::random_source& source) {
-        std::size_t limit = source.below(8);
-        return [limit](const std::string& folded) { return folded.size() <= limit; };
-      });
+  exhaustive_small<concat_monoid>("concat", [](testing::random_source& source) {
+    return std::string(1, static_cast<char>('a' + source.below(4)));
+  });
 
   padding_boundaries();
   constructors_and_value_semantics();
   monoid_specific_behaviour();
   non_commutative_order();
   exception_paths();
-  descent_edge_cases();
   large_against_quadratic();
 
   return testing::summarize("segment_tree") == 0 ? 0 : 1;

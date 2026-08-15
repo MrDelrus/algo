@@ -66,18 +66,17 @@ struct gcd_monoid {
 };
 
 // Point assignment, range fold over an arbitrary monoid.
-// Build O(n), get O(1), set O(log n), combine_at O(log n), query O(log n), query_all O(1),
-// find_right O(log n), find_left O(log n). Memory 2 * ceil_pow2(n) values.
+// Build O(n), get O(1), set O(log n), combine_at O(log n), query O(log n), query_all O(1).
+// Memory 2 * ceil_pow2(n) values.
 //
-// The leaf count is rounded up to a power of two so that the descent in find_right and
-// find_left is a plain walk down the tree. Padding leaves hold identity(), which is why
+// The leaf count is rounded up to a power of two. Padding leaves hold identity(), which is why
 // query(0, n) and query_all() agree.
 //
 // Ancestors are always recomputed from their two children, never patched in place. That is
 // what lets combine_at work for operations with no inverse, min and max among them.
 //
-// Every entry point validates its arguments and throws std::out_of_range or
-// std::invalid_argument on misuse. A satisfied check is one predicted branch.
+// Every entry point validates its arguments and throws std::out_of_range on misuse.
+// A satisfied check is one predicted branch.
 template <typename monoid>
 class segment_tree {
  public:
@@ -143,72 +142,6 @@ class segment_tree {
     return _tree.empty() ? monoid::identity() : _tree[1];
   }
 
-  // Largest right in [left, n] with is_good(query(left, right)) true.
-  // Requires is_good(identity()) to be true and is_good to stay false once it turns false.
-  template <typename predicate>
-  std::size_t find_right(std::size_t left, predicate is_good) const {
-    check_boundary(left, "segment_tree::find_right");
-    check_predicate(is_good, "segment_tree::find_right");
-    if (left == _size) {
-      return _size;
-    }
-    std::size_t node = left + _leaves;
-    value_type accumulated = monoid::identity();
-    do {
-      while (node % 2 == 0) {
-        node /= 2;
-      }
-      value_type extended = monoid::combine(accumulated, _tree[node]);
-      if (!is_good(extended)) {
-        while (node < _leaves) {
-          node *= 2;
-          value_type with_child = monoid::combine(accumulated, _tree[node]);
-          if (is_good(with_child)) {
-            accumulated = with_child;
-            ++node;
-          }
-        }
-        return node - _leaves;
-      }
-      accumulated = extended;
-      ++node;
-    } while ((node & (node - 1)) != 0);
-    return _size;
-  }
-
-  // Smallest left in [0, right] with is_good(query(left, right)) true.
-  // Requires is_good(identity()) to be true and is_good to stay false once it turns false.
-  template <typename predicate>
-  std::size_t find_left(std::size_t right, predicate is_good) const {
-    check_boundary(right, "segment_tree::find_left");
-    check_predicate(is_good, "segment_tree::find_left");
-    if (right == 0) {
-      return 0;
-    }
-    std::size_t node = right + _leaves;
-    value_type accumulated = monoid::identity();
-    do {
-      --node;
-      while (node > 1 && node % 2 == 1) {
-        node /= 2;
-      }
-      value_type extended = monoid::combine(_tree[node], accumulated);
-      if (!is_good(extended)) {
-        while (node < _leaves) {
-          node = 2 * node + 1;
-          value_type with_child = monoid::combine(_tree[node], accumulated);
-          if (is_good(with_child)) {
-            accumulated = with_child;
-            --node;
-          }
-        }
-        return node + 1 - _leaves;
-      }
-      accumulated = extended;
-    } while ((node & (node - 1)) != 0);
-    return 0;
-  }
-
  private:
   static std::size_t leaf_count(std::size_t size) {
     return std::bit_ceil(size == 0 ? std::size_t(1) : size);
@@ -229,34 +162,15 @@ class segment_tree {
                             ")");
   }
 
-  [[noreturn]] static void reject_predicate(const char* where) {
-    throw std::invalid_argument(std::string(where) +
-                                ": the predicate must accept identity(), otherwise no answer "
-                                "exists for an empty range");
-  }
-
   void check_position(std::size_t position, const char* where) const {
     if (position >= _size) {
       reject_position(where, position, _size);
     }
   }
 
-  void check_boundary(std::size_t boundary, const char* where) const {
-    if (boundary > _size) {
-      reject_position(where, boundary, _size);
-    }
-  }
-
   void check_range(std::size_t left, std::size_t right, const char* where) const {
     if (left > right || right > _size) {
       reject_range(where, left, right, _size);
-    }
-  }
-
-  template <typename predicate>
-  void check_predicate(predicate is_good, const char* where) const {
-    if (!is_good(monoid::identity())) {
-      reject_predicate(where);
     }
   }
 

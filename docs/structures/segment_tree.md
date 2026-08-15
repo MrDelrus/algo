@@ -2,7 +2,7 @@
 
 ## Summary
 
-Point assignment and range fold over an arbitrary monoid, with an O(log n) descent that finds how far a range can be extended before a predicate stops holding.
+Point assignment and range fold over an arbitrary monoid.
 
 ## Complexity
 
@@ -15,9 +15,8 @@ Point assignment and range fold over an arbitrary monoid, with an O(log n) desce
 | `combine_at` | O(log n) |
 | `query` | O(log n) |
 | `query_all` | O(1) |
-| `find_right`, `find_left` | O(log n) |
 
-Memory is `2 * ceil_pow2(n)` values. The leaf count is rounded up to a power of two so that the descent is a plain walk down the tree; on an unpadded layout the leaves are rotated and the descent becomes error-prone. Padding leaves hold `identity()`, which is why `query(0, n)` and `query_all()` agree.
+Memory is `2 * ceil_pow2(n)` values. The leaf count is rounded up to a power of two, and the padding leaves hold `identity()`, which is why `query(0, n)` and `query_all()` agree.
 
 Measured throughput is in [benchmarks/structures/segment_tree.md](../../benchmarks/structures/segment_tree.md).
 
@@ -60,11 +59,6 @@ class segment_tree {
 
   value_type query(std::size_t left, std::size_t right) const;
   value_type query_all() const;
-
-  template <typename predicate>
-  std::size_t find_right(std::size_t left, predicate is_good) const;
-  template <typename predicate>
-  std::size_t find_left(std::size_t right, predicate is_good) const;
 };
 ```
 
@@ -80,35 +74,6 @@ Positions are 0-indexed, ranges are half-open `[left, right)`.
 | `combine_at(position, value)` | `a[position] = combine(a[position], value)`. Adding to an element in a sum tree, taking a minimum with it in a min tree. |
 | `query(left, right)` | Fold of `[left, right)`. Returns `identity()` when `left == right`. |
 | `query_all()` | Fold of the whole array, read straight from the root. Equal to `query(0, n)`. |
-| `find_right(left, is_good)` | The largest `right` in `[left, n]` with `is_good(query(left, right))` true. |
-| `find_left(right, is_good)` | The smallest `left` in `[0, right]` with `is_good(query(left, right))` true. |
-
-### The descent
-
-The predicate is applied to the **fold of a candidate range**, never to a single element or an index.
-
-`find_right` fixes the left end and grows the range rightwards until the predicate breaks; `find_left` fixes the right end and grows leftwards. Both return exactly the index that goes into `query` in its own place, so the found range is `[left, find_right(left, …))` or `[find_left(right, …), right)` with no adjustment by one.
-
-Two preconditions:
-
-- `is_good(identity())` must be true — the empty range has to qualify, otherwise no answer exists. Violating this throws `std::invalid_argument`.
-- The predicate must be monotone: once false, it stays false as the range keeps growing. Violating this is not detected — the descent simply returns a boundary that a linear scan would not agree with.
-
-The monotonicity requirement is easy to break by accident. `sum <= limit` is monotone only while the values cannot pull the sum back down, so it holds for non-negative data and fails the moment negatives appear. `min >= bound` and `max <= bound` are monotone for any data, since a minimum only falls and a maximum only rises as the range grows.
-
-**There is no "not found".** The answer always exists, because the empty range always qualifies: its fold is `identity()`, and `is_good(identity())` is required to be true. A predicate that breaks immediately yields the empty range — `find_right` returns `left`, `find_left` returns `right`. A predicate that never breaks yields everything left of the boundary — `n` and `0` respectively. The genuine "no such index" case is a predicate that rejects `identity()`, and that throws rather than returning a lie.
-
-At the call site, "nothing found" is expressed by the end of the range:
-
-```cpp
-// The first position at or after `left` holding a value below x, if there is one.
-std::size_t position = tree.find_right(left, [x](std::int64_t smallest) { return smallest >= x; });
-if (position == n) {
-  // no such position — the minimum over [left, n) never dropped below x
-}
-```
-
-Accumulation order is part of the contract, since non-commutative monoids are supported. `find_right` accumulates as `combine(accumulated, node)`, `find_left` as `combine(node, accumulated)`; in both, the accumulator equals the genuine fold of the current range.
 
 ## Usage
 
@@ -120,12 +85,8 @@ tree.set(2, 10);            // values[2] = 10
 tree.combine_at(0, 3);      // values[0] += 3
 std::int64_t total = tree.query(1, 5);
 
-// How far does a prefix starting at 1 stay within a budget?
-std::size_t right = tree.find_right(1, [](std::int64_t sum) { return sum <= 20; });
-
-// The first position at or after 2 holding a value below 4.
 ds::min_segment_tree minimums(values);
-std::size_t position = minimums.find_right(2, [](std::int64_t smallest) { return smallest >= 4; });
+std::int64_t smallest = minimums.query(0, 4);
 ```
 
 Aliases: `sum_segment_tree`, `min_segment_tree`, `max_segment_tree`, `gcd_segment_tree`, all over `std::int64_t`. For anything else, name the core: `ds::segment_tree<ds::min_monoid<std::int32_t>>`.
@@ -136,11 +97,11 @@ Aliases: `sum_segment_tree`, `min_segment_tree`, `max_segment_tree`, `gcd_segmen
 
 This is also why `combine_at` needs no inverse and works for `min`, `max`, and `gcd`, none of which have one. Structures that genuinely require an inverse, `fenwick` among them, will take a stronger contract than a monoid.
 
-**Every entry point validates its arguments.** `std::out_of_range` for a position at or past `n`, a range reaching past `n`, or a reversed range; `std::invalid_argument` for a predicate that rejects `identity()`. A satisfied check is one perfectly predicted branch, and the message is only built on the failing path. `query(5, 5)` on a tree of size 5 is legal and returns `identity()`; `query(4, 2)` is a bug and throws.
+**Every entry point validates its arguments** and throws `std::out_of_range` for a position at or past `n`, a range reaching past `n`, or a reversed range. A satisfied check is one perfectly predicted branch, and the message is only built on the failing path. `query(5, 5)` on a tree of size 5 is legal and returns `identity()`; `query(4, 2)` is a bug and throws.
 
 **Overflow is the caller's problem.** `sum_monoid<std::int64_t>` will wrap silently if the total exceeds 64 bits; nothing in the tree checks for it.
 
-**When not to use it.** For point updates and prefix sums only, `fenwick` is smaller, faster by a constant factor, and shorter to type. Reach for `segment_tree` when the operation has no inverse, when ranges are arbitrary rather than prefixes, or when the descent is what the problem actually needs.
+**When not to use it.** For point updates and prefix sums only, `fenwick` is smaller, faster by a constant factor, and shorter to type. Reach for `segment_tree` when the operation has no inverse, or when ranges are arbitrary rather than prefixes.
 
 ## Related
 
