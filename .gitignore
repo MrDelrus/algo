@@ -33,3 +33,6 @@ Template_for_CodeForces/
 
 # Local Claude Code session config
 .claude/
+
+# Secrets
+.env
