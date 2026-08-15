@@ -31,6 +31,12 @@ MEMORY.md                    untracked, personal
 
 The library lives in `namespace algo`, split into `algo::graphs` and `algo::data_structures`. Every component belongs to one of those two.
 
+Inside an area, a component family gets its own namespace, named in the plural: `segment_trees` holds `segment_tree` and `lazy_segment_tree`. Namespaces never carry a leading underscore — that marks a private member, and a family namespace is not private, it is what a caller types to reach the core with a custom parameter. Genuinely internal helpers go in a nested `detail` namespace instead.
+
+Shared vocabulary — monoids and anything else several families consume — stays one level up, directly in the area namespace, so a single type serves every structure that takes it.
+
+**Aliases are declared last**, after every family namespace in the area is closed, gathered in one block. That block is the list of what the library actually offers, and keeping it in one place is the point.
+
 Once components exist, short aliases are declared in `main.cpp` below the library block with `namespace gr = algo::graphs;` and `namespace ds = algo::data_structures;` — namespace aliases need `namespace`, not `using`.
 
 ## Code conventions

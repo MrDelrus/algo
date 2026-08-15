@@ -39,11 +39,13 @@ struct sum_monoid {
 
 Four are provided — `sum_monoid`, `min_monoid`, `max_monoid`, `gcd_monoid` — with identities `0`, `numeric_limits::max()`, `numeric_limits::lowest()`, and `0` respectively. A custom one is the five lines above.
 
-Monoids live directly in `algo::data_structures`, not inside the tree, because every structure parameterized by an operation will reuse them.
+Monoids live directly in `algo::data_structures`, one level above the tree's own namespace, because every structure parameterized by an operation reuses them — `ds::min_monoid<std::int64_t>` is the same type whether a segment tree or a sparse table consumes it.
 
 ## API
 
 ```cpp
+namespace algo::data_structures::segment_trees {
+
 template <typename monoid>
 class segment_tree {
  public:
@@ -60,6 +62,8 @@ class segment_tree {
   value_type query(std::size_t left, std::size_t right) const;
   value_type query_all() const;
 };
+
+}  // namespace algo::data_structures::segment_trees
 ```
 
 Positions are 0-indexed, ranges are half-open `[left, right)`.
@@ -89,7 +93,14 @@ ds::min_segment_tree minimums(values);
 std::int64_t smallest = minimums.query(0, 4);
 ```
 
-Aliases: `sum_segment_tree`, `min_segment_tree`, `max_segment_tree`, `gcd_segment_tree`, all over `std::int64_t`. For anything else, name the core: `ds::segment_tree<ds::min_monoid<std::int32_t>>`.
+The class lives in `algo::data_structures::segment_trees`, the family namespace it will share with `lazy_segment_tree`. Aliases for the presets are declared one level up, alongside every other structure the library offers: `ds::sum_segment_tree`, `ds::min_segment_tree`, `ds::max_segment_tree`, `ds::gcd_segment_tree`, all over `std::int64_t`.
+
+Reach past an alias only for a monoid that has no preset:
+
+```cpp
+ds::segment_trees::segment_tree<ds::min_monoid<std::int32_t>> tree(values);
+ds::segment_trees::segment_tree<my_monoid> custom(values);
+```
 
 ## Notes
 

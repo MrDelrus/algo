@@ -65,6 +65,8 @@ struct gcd_monoid {
   }
 };
 
+namespace segment_trees {
+
 // Point assignment, range fold over an arbitrary monoid.
 // Build O(n), get O(1), set O(log n), combine_at O(log n), query O(log n), query_all O(1).
 // Memory 2 * ceil_pow2(n) values.
@@ -186,10 +188,15 @@ class segment_tree {
   std::vector<value_type> _tree;
 };
 
-using sum_segment_tree = segment_tree<sum_monoid<std::int64_t>>;
-using min_segment_tree = segment_tree<min_monoid<std::int64_t>>;
-using max_segment_tree = segment_tree<max_monoid<std::int64_t>>;
-using gcd_segment_tree = segment_tree<gcd_monoid<std::int64_t>>;
+}  // namespace segment_trees
+
+// Every structure the library offers, gathered in one place. Reach past an alias only for a
+// monoid that has no preset: ds::segment_trees::segment_tree<my_monoid>.
+
+using sum_segment_tree = segment_trees::segment_tree<sum_monoid<std::int64_t>>;
+using min_segment_tree = segment_trees::segment_tree<min_monoid<std::int64_t>>;
+using max_segment_tree = segment_trees::segment_tree<max_monoid<std::int64_t>>;
+using gcd_segment_tree = segment_trees::segment_tree<gcd_monoid<std::int64_t>>;
 
 }  // namespace data_structures
 

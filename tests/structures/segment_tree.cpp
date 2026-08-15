@@ -59,7 +59,7 @@ std::string describe(std::size_t size, std::size_t first, std::size_t second) {
 
 // Every range, every position, against the linear fold.
 template <typename monoid>
-void check_against_linear(const algo::data_structures::segment_tree<monoid>& tree,
+void check_against_linear(const algo::data_structures::segment_trees::segment_tree<monoid>& tree,
                           const std::vector<typename monoid::value_type>& values,
                           const std::string& note) {
   std::size_t size = values.size();
@@ -88,7 +88,7 @@ void exhaustive_small(const std::string& name, value_generator make_value) {
       values.push_back(make_value(source));
     }
 
-    algo::data_structures::segment_tree<monoid> tree(values);
+    algo::data_structures::segment_trees::segment_tree<monoid> tree(values);
     check_against_linear<monoid>(tree, values, name + " fresh");
 
     // Both update flavours, with the whole tree re-verified after each one. Slow on purpose: at
@@ -231,7 +231,7 @@ void non_commutative_order() {
   for (std::size_t index = 0; index < 20; ++index) {
     letters.push_back(std::string(1, static_cast<char>('a' + index)));
   }
-  algo::data_structures::segment_tree<concat_monoid> tree(letters);
+  algo::data_structures::segment_trees::segment_tree<concat_monoid> tree(letters);
 
   check_equal(tree.query(0, 20), std::string("abcdefghijklmnopqrst"), "the whole word in order");
   check_equal(tree.query_all(), std::string("abcdefghijklmnopqrst"), "the root holds the order");
