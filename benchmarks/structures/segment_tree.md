@@ -19,7 +19,9 @@ The operation stream is a counter-based splitmix64 with a fixed seed, so a rerun
 
 **How per-operation timings are obtained.** The same stream is replayed with a mask that enables one operation kind at a time; every pass draws the same numbers in the same order, so passes differ only in the tree work they do. Subtracting the pass with an empty mask — the *generator* row — leaves the cost of that operation alone.
 
-Two consequences worth knowing. Costs of a few nanoseconds sit close to the measurement floor and should be read as "too cheap to separate cleanly from the generator". And an isolated pass mutates the tree less than the full mix does, so a per-operation figure is that operation measured on its own, not its cost amid the others.
+**† marks a figure below the measurement floor.** Two passes of 2e7 operations never take exactly the same time, and when an operation costs less than that jitter, the subtraction returns noise — sometimes a negative number, which is the proof that nothing measurable was left. Read those rows as "too cheap for this method to resolve", not as "free". `query_all` is one read of the root, which is always in cache, so its true cost is around a nanosecond.
+
+One more caveat: an isolated pass mutates the tree less than the full mix does, so a per-operation figure is that operation measured on its own, not its cost amid the others.
 
 ## Scenario 1 — one hot position
 
@@ -33,7 +35,7 @@ Half `get`, half `set`, every one of them aimed at a single position drawn once.
 | Operation | Calls | ns per call |
 | --- | --- | --- |
 | `set` | 10 000 109 | 20.3 |
-| `get` | 9 999 891 | 0.5 |
+| `get` | 9 999 891 | 0.5 † |
 
 An update against a hot cache costs 20 ns for 18 levels — a little over a nanosecond per level. `get` is a single array read and does not separate from the generator.
 
@@ -52,7 +54,7 @@ Random positions. `set` 2/10, `combine_at` 2/10, `get` 2/10, `query` 3/10, `quer
 | `combine_at` | 3 999 965 | 60.0 |
 | `get` | 3 999 744 | 8.1 |
 | `query` | 6 001 232 | 111.6 |
-| `query_all` | 1 997 203 | 0.3 |
+| `query_all` | 1 997 203 | 0.3 † |
 
 `set` costs 2.8x what it did in scenario 1 — that gap is cache misses, not extra work, since the instruction count is identical. `combine_at` runs a few nanoseconds behind `set`, which is the one extra `combine` on the leaf. `query` costs about twice an update: it descends from both ends and touches two paths instead of one. `query_all` reads the root and does not separate from the generator at all.
 
@@ -71,7 +73,7 @@ Random positions. `set` 1/10, `combine_at` 1/10, `get` 1/10, `query` 5/10, `quer
 | `combine_at` | 2 001 273 | 70.0 |
 | `get` | 1 998 395 | 19.2 |
 | `query` | 10 001 689 | 113.5 |
-| `query_all` | 3 999 751 | below the floor |
+| `query_all` | 3 999 751 | -0.1 † |
 
 `query` lands at 113.5 ns against 111.6 ns in scenario 2 — the same cost under a different mix, which is the reassuring answer. The point operations are measured over five times fewer calls here, so their figures carry correspondingly more noise; the difference from scenario 2 is measurement, not behaviour.
 
