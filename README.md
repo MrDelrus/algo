@@ -13,7 +13,8 @@ A personal library written ahead of time (with the help of Claude Opus 5) and pu
 | `main.cpp` | The submission file. |
 | [docs/](docs/) | **Index of every component and its documentation.** |
 | [benchmarks/](benchmarks/) | Speed measurements and the container they run in. |
-| `scripts/` | Formatting and library extraction. |
+| [tests/](tests/) | Correctness tests, run under sanitizers. |
+| `scripts/` | Formatting, library extraction, the test runner. |
 
 ## License
 

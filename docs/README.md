@@ -4,15 +4,15 @@ One page per component. Every page has the same sections: summary, complexity, A
 
 ## Data structures — `algo::data_structures`, alias `ds`
 
-| Component | Documentation | Benchmark |
-| --- | --- | --- |
-| `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [results](../benchmarks/structures/segment_tree.md) |
+| Component | Documentation | Benchmark | Tests |
+| --- | --- | --- | --- |
+| `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [results](../benchmarks/structures/segment_tree.md) | [source](../tests/structures/segment_tree.cpp) |
 
 ## Graphs — `algo::graphs`, alias `gr`
 
-| Component | Documentation | Benchmark |
-| --- | --- | --- |
-| _none yet_ | | |
+| Component | Documentation | Benchmark | Tests |
+| --- | --- | --- | --- |
+| _none yet_ | | | |
 
 ## Conventions
 

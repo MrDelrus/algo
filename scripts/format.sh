@@ -3,7 +3,7 @@
 #
 # In main.cpp the competitive template (includes, macros, aliases, solve, main) is
 # hand-arranged and must stay untouched, so only the body of `namespace algo` is passed
-# to clang-format. Benchmarks are formatted whole.
+# to clang-format. Benchmarks and tests are formatted whole.
 #
 # Usage:
 #   scripts/format.sh          rewrite files in place
@@ -40,7 +40,7 @@ else
 fi
 
 shopt -s nullglob
-benchmarks=(benchmarks/*/*.cpp)
-if ((${#benchmarks[@]} > 0)); then
-  clang-format "${mode[@]}" "${benchmarks[@]}"
+others=(benchmarks/*/*.cpp tests/*/*.cpp tests/*.hpp)
+if ((${#others[@]} > 0)); then
+  clang-format "${mode[@]}" "${others[@]}"
 fi

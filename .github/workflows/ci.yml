@@ -47,6 +47,15 @@ jobs:
             echo "::endgroup::"
           done
 
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: run every test under sanitizers
+        run: scripts/run_tests.sh
+
   format:
     name: clang-format
     runs-on: ubuntu-latest
@@ -70,7 +79,7 @@ jobs:
       - name: no built-in integer types in library code
         run: |
           shopt -s nullglob
-          sources=(benchmarks/*/*.cpp)
+          sources=(benchmarks/*/*.cpp tests/*/*.cpp tests/*.hpp)
           sed -n '/^namespace algo {$/,/^}  \/\/ namespace algo$/p' main.cpp > /tmp/library_region.cpp
           if [ ! -s /tmp/library_region.cpp ]; then
             echo "::error::could not locate the 'namespace algo' block in main.cpp"

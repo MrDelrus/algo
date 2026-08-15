@@ -18,6 +18,9 @@ docs/structures/             one page per data structure
 docs/graphs/                 one page per graph algorithm
 benchmarks/structures/       .cpp that measures + .md that records the numbers
 benchmarks/graphs/
+tests/harness.hpp            shared assertion helpers
+tests/structures/            correctness tests, one file per component
+tests/graphs/
 .github/workflows/ci.yml     build, benchmarks, formatting, style rules
 MEMORY.md                    untracked, personal
 ```
@@ -68,6 +71,12 @@ A component without a doc page is unfinished. Changing a component means updatin
 `benchmarks/` mirrors `docs/`: per component a `.cpp` that measures and a `.md` that describes each scenario and records its numbers — total first, then the average cost of every operation on its own. Rules live in `benchmarks/README.md`; run them with `benchmarks/run.sh`, which pins resources in a container.
 
 An std component is only replaced by a hand-written one when a benchmark shows at least a 2x win.
+
+## Tests
+
+`tests/` mirrors `docs/` too. Run them with `scripts/run_tests.sh`; everything compiles with ASan and UBSan. What a test file owes is in `tests/README.md` — the short version: check against an obvious reference, be exhaustive for `n <= 32`, hit the power-of-two boundaries, include a non-commutative monoid, cover what must throw *and* what must not, and carry a couple of deterministic cases at `n` near 1e3 verified against a quadratic reference.
+
+A component is unfinished without tests, exactly as it is unfinished without a doc page.
 
 ## Build
 

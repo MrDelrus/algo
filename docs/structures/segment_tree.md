@@ -92,7 +92,9 @@ The predicate is applied to the **fold of a candidate range**, never to a single
 Two preconditions:
 
 - `is_good(identity())` must be true — the empty range has to qualify, otherwise no answer exists. Violating this throws `std::invalid_argument`.
-- The predicate must be monotone: once false, it stays false as the range keeps growing.
+- The predicate must be monotone: once false, it stays false as the range keeps growing. Violating this is not detected — the descent simply returns a boundary that a linear scan would not agree with.
+
+The monotonicity requirement is easy to break by accident. `sum <= limit` is monotone only while the values cannot pull the sum back down, so it holds for non-negative data and fails the moment negatives appear. `min >= bound` and `max <= bound` are monotone for any data, since a minimum only falls and a maximum only rises as the range grows.
 
 Accumulation order is part of the contract, since non-commutative monoids are supported. `find_right` accumulates as `combine(accumulated, node)`, `find_left` as `combine(node, accumulated)`; in both, the accumulator equals the genuine fold of the current range.
 
@@ -132,3 +134,4 @@ This is also why `combine_at` needs no inverse and works for `min`, `max`, and `
 
 - [documentation index](../README.md)
 - [benchmark results](../../benchmarks/structures/segment_tree.md)
+- [tests](../../tests/structures/segment_tree.cpp)
