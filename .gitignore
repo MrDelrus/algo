@@ -1,0 +1,38 @@
+# Private working notes
+MEMORY.md
+
+# Build artifacts
+*.o
+*.out
+*.exe
+a.out
+main
+main_dbg
+build/
+cmake-build-*/
+
+# Local test data
+input.txt
+output.txt
+*.in
+*.out
+!benchmarks/**/*.in
+
+# Benchmark results that are machine-local
+benchmarks/results/local/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Third-party reference material, kept locally only
+Template_for_CodeForces/
+
+# Local Claude Code session config
+.claude/
+
+# Secrets
+.env
