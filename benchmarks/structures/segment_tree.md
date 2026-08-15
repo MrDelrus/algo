@@ -6,14 +6,14 @@ Source: [segment_tree.cpp](segment_tree.cpp). Run with `benchmarks/run.sh struct
 
 | | |
 | --- | --- |
-| Structure | `segment_tree<sum_monoid<std::int64_t>>` |
+| Structure | `ds::sum_segment_tree` |
 | `n` | 200 000 |
 | Operations per scenario | 20 000 000 |
 | Repetitions | 5, fastest reported |
 | Compiler | GCC 13.2.0 |
 | Flags | `-std=c++20 -O2 -static -Wall -Wextra -Werror` |
 | Container | `gcc:13.2.0`, 1 CPU pinned to one core, 256 MB, no network |
-| Build time | 0.45 ms |
+| Build time | 0.52 ms |
 
 The operation stream is a counter-based splitmix64 with a fixed seed, so a rerun performs bitwise identical work. No `std` distribution is involved — those are not specified to produce identical output across standard library implementations.
 
@@ -27,15 +27,15 @@ Half `get`, half `set`, every one of them aimed at a single position drawn once.
 
 | | Time | Per operation | Spread |
 | --- | --- | --- | --- |
-| Total | 369.98 ms | 18.5 ns | 1.4% |
-| Generator alone | 153.03 ms | 7.7 ns | |
+| Total | 359.88 ms | 18.0 ns | 0.8% |
+| Generator alone | 151.67 ms | 7.6 ns | |
 
 | Operation | Calls | ns per call |
 | --- | --- | --- |
-| `set` | 10 000 109 | 21.0 |
-| `get` | 9 999 891 | 0.2 |
+| `set` | 10 000 109 | 20.3 |
+| `get` | 9 999 891 | 0.5 |
 
-An update against a hot cache costs 21 ns for 18 levels — a little over a nanosecond per level. `get` is a single array read and does not separate from the generator.
+An update against a hot cache costs 20 ns for 18 levels — a little over a nanosecond per level. `get` is a single array read and does not separate from the generator.
 
 ## Scenario 2 — balanced
 
@@ -43,18 +43,18 @@ Random positions. `set` 2/10, `combine_at` 2/10, `get` 2/10, `query` 3/10, `quer
 
 | | Time | Per operation | Spread |
 | --- | --- | --- | --- |
-| Total | 1416.50 ms | 70.8 ns | 5.8% |
-| Generator alone | 319.73 ms | 16.0 ns | |
+| Total | 1369.90 ms | 68.5 ns | 5.4% |
+| Generator alone | 319.96 ms | 16.0 ns | |
 
 | Operation | Calls | ns per call |
 | --- | --- | --- |
-| `set` | 4 001 856 | 58.1 |
-| `combine_at` | 3 999 965 | 62.0 |
-| `get` | 3 999 744 | 9.3 |
-| `query` | 6 001 232 | 113.0 |
-| `query_all` | 1 997 203 | 9.5 |
+| `set` | 4 001 856 | 57.6 |
+| `combine_at` | 3 999 965 | 60.0 |
+| `get` | 3 999 744 | 8.1 |
+| `query` | 6 001 232 | 111.6 |
+| `query_all` | 1 997 203 | 0.3 |
 
-`set` costs 2.8x what it did in scenario 1 — that gap is cache misses, not extra work, since the instruction count is identical. `combine_at` runs a few nanoseconds behind `set`, which is the one extra `combine` on the leaf. `query` costs about twice an update: it descends from both ends and touches two paths instead of one. `query_all` reads the root, and its 9.5 ns is measurement floor rather than real work.
+`set` costs 2.8x what it did in scenario 1 — that gap is cache misses, not extra work, since the instruction count is identical. `combine_at` runs a few nanoseconds behind `set`, which is the one extra `combine` on the leaf. `query` costs about twice an update: it descends from both ends and touches two paths instead of one. `query_all` reads the root and does not separate from the generator at all.
 
 ## Scenario 3 — query heavy
 
@@ -62,22 +62,22 @@ Random positions. `set` 1/10, `combine_at` 1/10, `get` 1/10, `query` 5/10, `quer
 
 | | Time | Per operation | Spread |
 | --- | --- | --- | --- |
-| Total | 1643.96 ms | 82.2 ns | 9.6% |
-| Generator alone | 375.02 ms | 18.8 ns | |
+| Total | 1669.80 ms | 83.5 ns | 2.5% |
+| Generator alone | 361.52 ms | 18.1 ns | |
 
 | Operation | Calls | ns per call |
 | --- | --- | --- |
-| `set` | 1 998 892 | 44.5 |
-| `combine_at` | 2 001 273 | 50.7 |
-| `get` | 1 998 395 | 11.9 |
-| `query` | 10 001 689 | 112.0 |
-| `query_all` | 3 999 751 | 1.1 |
+| `set` | 1 998 892 | 61.2 |
+| `combine_at` | 2 001 273 | 70.0 |
+| `get` | 1 998 395 | 19.2 |
+| `query` | 10 001 689 | 113.5 |
+| `query_all` | 3 999 751 | below the floor |
 
-`query` lands at 112.0 ns against 113.0 ns in scenario 2 — the same cost under a different mix, which is the reassuring answer. The point operations are measured over five times fewer calls here, so their figures carry correspondingly more noise; the difference from scenario 2 is measurement, not behaviour.
+`query` lands at 113.5 ns against 111.6 ns in scenario 2 — the same cost under a different mix, which is the reassuring answer. The point operations are measured over five times fewer calls here, so their figures carry correspondingly more noise; the difference from scenario 2 is measurement, not behaviour.
 
 ## Reading the numbers
 
-Total throughput moves from 18.5 to 82.2 ns per operation across the three scenarios, and essentially all of that spread is memory. The tree executes the same instructions in all three; what changes is whether the path it walks is already in cache.
+Total throughput moves from 18.0 to 83.5 ns per operation across the three scenarios, and essentially all of that spread is memory. The tree executes the same instructions in all three; what changes is whether the path it walks is already in cache.
 
 The practical ceiling: at 2e5 elements and a query-heavy mix, this structure sustains roughly 12 million operations per second per core. A problem with 2e5 queries spends about 20 ms in the tree, comfortable against a 1–2 second limit.
 

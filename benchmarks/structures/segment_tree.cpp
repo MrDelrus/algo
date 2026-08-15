@@ -93,8 +93,8 @@ std::vector<std::int64_t> make_initial_values(std::size_t size) {
 
 // Replays the scenario's stream. Random numbers are always drawn, whatever the mask says, so
 // every mask walks the identical stream; the mask only decides which calls reach the tree.
-std::uint64_t replay(ds::segment_tree<ds::sum_monoid<std::int64_t>>& tree, const scenario& plan,
-                     std::uint64_t enabled, std::size_t size, std::size_t operations,
+std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, std::uint64_t enabled,
+                     std::size_t size, std::size_t operations,
                      std::array<std::size_t, operation_kind_count>& counts) {
   random_source source(seed);
   std::size_t pinned_position = plan.single_position ? source.below(size) : 0;
@@ -170,7 +170,7 @@ timing measure(const scenario& plan, std::uint64_t enabled,
   timing result;
   std::vector<double> timings;
   for (std::size_t repetition = 0; repetition < repetition_count; ++repetition) {
-    ds::segment_tree<ds::sum_monoid<std::int64_t>> tree(initial);
+    ds::sum_segment_tree tree(initial);
     std::array<std::size_t, operation_kind_count> counts = {};
     auto started = std::chrono::steady_clock::now();
     result.checksum = replay(tree, plan, enabled, size, operations, counts);
@@ -189,7 +189,7 @@ double measure_build(const std::vector<std::int64_t>& initial) {
   std::uint64_t sink = 0;
   for (std::size_t repetition = 0; repetition < repetition_count; ++repetition) {
     auto started = std::chrono::steady_clock::now();
-    ds::segment_tree<ds::sum_monoid<std::int64_t>> tree(initial);
+    ds::sum_segment_tree tree(initial);
     auto finished = std::chrono::steady_clock::now();
     sink += static_cast<std::uint64_t>(tree.query_all());
     timings.push_back(std::chrono::duration<double, std::milli>(finished - started).count());
