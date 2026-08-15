@@ -96,6 +96,18 @@ Two preconditions:
 
 The monotonicity requirement is easy to break by accident. `sum <= limit` is monotone only while the values cannot pull the sum back down, so it holds for non-negative data and fails the moment negatives appear. `min >= bound` and `max <= bound` are monotone for any data, since a minimum only falls and a maximum only rises as the range grows.
 
+**There is no "not found".** The answer always exists, because the empty range always qualifies: its fold is `identity()`, and `is_good(identity())` is required to be true. A predicate that breaks immediately yields the empty range — `find_right` returns `left`, `find_left` returns `right`. A predicate that never breaks yields everything left of the boundary — `n` and `0` respectively. The genuine "no such index" case is a predicate that rejects `identity()`, and that throws rather than returning a lie.
+
+At the call site, "nothing found" is expressed by the end of the range:
+
+```cpp
+// The first position at or after `left` holding a value below x, if there is one.
+std::size_t position = tree.find_right(left, [x](std::int64_t smallest) { return smallest >= x; });
+if (position == n) {
+  // no such position — the minimum over [left, n) never dropped below x
+}
+```
+
 Accumulation order is part of the contract, since non-commutative monoids are supported. `find_right` accumulates as `combine(accumulated, node)`, `find_left` as `combine(node, accumulated)`; in both, the accumulator equals the genuine fold of the current range.
 
 ## Usage
