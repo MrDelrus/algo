@@ -18,7 +18,7 @@ Point assignment and range fold over an arbitrary monoid.
 
 Memory is `2 * ceil_pow2(n)` values. The leaf count is rounded up to a power of two, and the padding leaves hold `identity()`, which is why `query(0, n)` and `query_all()` agree.
 
-Measured throughput is in [benchmarks/structures/segment_tree.md](../../benchmarks/structures/segment_tree.md).
+Measured throughput is in [Performance](#performance) below.
 
 ## The monoid
 
@@ -114,8 +114,30 @@ This is also why `combine_at` needs no inverse and works for `min`, `max`, and `
 
 **When not to use it.** For point updates and prefix sums only, `fenwick` is smaller, faster by a constant factor, and shorter to type. Reach for `segment_tree` when the operation has no inverse, or when ranges are arbitrary rather than prefixes.
 
+## Performance
+
+Source: [benchmarks/structures/segment_tree.cpp](../../benchmarks/structures/segment_tree.cpp), run with `benchmarks/run.sh structures/segment_tree`.
+
+GCC 13.2.0, `-std=c++20 -O2 -static`, in a container pinned to one core with 256 MB and no network. `n = 200 000`, 20 000 000 operations per scenario, fastest of 5 runs. Building the tree from a vector takes **0.52 ms**.
+
+Each scenario is a fixed mix of operations at random positions, drawn from a counter-based splitmix64 with a fixed seed — a rerun performs bitwise identical work. The generator row is the same stream drawn without touching the tree, so the harness cost is visible rather than folded into the total.
+
+| Scenario | Mix | Total | Per operation | Generator | Spread |
+| --- | --- | --- | --- | --- | --- |
+| 1 — one hot position | `get` 5/10, `set` 5/10, all aimed at a single position drawn once | 359.95 ms | 18.0 ns | 7.4 ns | 1.2% |
+| 2 — balanced | `set` 2/10, `combine_at` 2/10, `get` 2/10, `query` 3/10, `query_all` 1/10 | 1544.14 ms | 77.2 ns | 16.2 ns | 1.5% |
+| 3 — query heavy | `set` 1/10, `combine_at` 1/10, `get` 1/10, `query` 5/10, `query_all` 2/10 | 1747.14 ms | 87.4 ns | 18.1 ns | 1.0% |
+
+Scenario 1 keeps the whole root-to-leaf path in cache; scenarios 2 and 3 miss on every access. The tree executes the same instructions in all three, so the jump from 18 to 87 ns per operation is memory, not work — which is the useful thing to know when a solution is close to the limit. Moving weight from point updates onto range queries costs 13%, since a query descends from both ends and touches two paths instead of one.
+
+Roughly 12 million operations per second per core at the heaviest mix: a problem with 2e5 queries spends about 20 ms inside the tree.
+
+Only the total is reported. Splitting it across operation kinds was tried and dropped — the jitter between two passes is a few percent, and dividing that by the calls of a one-in-ten operation leaves several nanoseconds of uncertainty per call, more than the cheap operations cost. What a single operation costs is what its complexity says it costs.
+
+Absolute times are not comparable to a Codeforces verdict; the judge's CPU and scheduler are different. They compare our implementations against each other under identical conditions.
+
 ## Related
 
 - [documentation index](../README.md)
-- [benchmark results](../../benchmarks/structures/segment_tree.md)
 - [tests](../../tests/structures/segment_tree.cpp)
+- [benchmark source](../../benchmarks/structures/segment_tree.cpp)

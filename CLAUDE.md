@@ -16,7 +16,7 @@ scripts/extract_library.sh   lifts namespace algo out of main.cpp into a header
 docs/README.md               the index of every component — the only index
 docs/structures/             one page per data structure
 docs/graphs/                 one page per graph algorithm
-benchmarks/structures/       .cpp that measures + .md that records the numbers
+benchmarks/structures/       .cpp that measures; results go in the doc page
 benchmarks/graphs/
 tests/harness.hpp            shared assertion helpers
 tests/structures/            correctness tests, one file per component
@@ -68,13 +68,16 @@ Every component has one Markdown page under `docs/graphs/` or `docs/structures/`
 3. **API** — signatures with parameter semantics and index conventions.
 4. **Usage** — a short, real snippet.
 5. **Notes** — invariants, precision limits, overflow risks, when *not* to use it.
-6. **Related** — links to sibling pages.
+6. **Performance** — the benchmark scenarios and their measured totals.
+7. **Related** — links to the index, tests, and benchmark source.
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 
 ## Benchmarks
 
-`benchmarks/` mirrors `docs/`: per component a `.cpp` that measures and a `.md` that describes each scenario and records its numbers — total first, then the average cost of every operation on its own. Rules live in `benchmarks/README.md`; run them with `benchmarks/run.sh`, which pins resources in a container.
+`benchmarks/` mirrors `docs/`: one `.cpp` per component. **Results are recorded in the component's doc page, under Performance** — a component has one page and its numbers belong on it. Rules live in `benchmarks/README.md`; run them with `benchmarks/run.sh`, which pins resources in a container.
+
+Each scenario reports one number, its total. Do not split a total across operation kinds: the jitter between two passes is a few percent, and divided by the calls of a minority operation that leaves an uncertainty larger than the operation itself.
 
 An std component is only replaced by a hand-written one when a benchmark shows at least a 2x win.
 

@@ -1,17 +1,17 @@
 # Benchmarks
 
-Speed only — correctness belongs to tests.
+Speed only — correctness belongs to `tests/`.
+
+**Results live in the component's documentation page**, under a Performance section, not here. This directory holds the measuring code and the environment it runs in; a component has one page and its numbers belong on it.
 
 ## Layout
 
-Mirrors `docs/`: one directory per area, and per component a `.cpp` that measures and a `.md` that describes the scenarios and records the numbers.
+Mirrors `docs/`: one directory per area, one `.cpp` per component.
 
 ```
 benchmarks/structures/segment_tree.cpp
-benchmarks/structures/segment_tree.md
+benchmarks/graphs/
 ```
-
-Each `.md` has one section per scenario: what it does, the total time, then the average cost of each operation on its own.
 
 ## Running
 
@@ -28,9 +28,10 @@ The container pins GCC 13.2.0 and `-std=c++20 -O2 -static`, matching Codeforces.
 
 ## Rules
 
+- **One number per scenario: the total.** Do not split a total across operation kinds. The jitter between two passes is a few percent, and dividing it by the calls of a minority operation leaves an uncertainty larger than the operation being measured. What one operation costs is what its complexity says it costs.
 - Deterministic: fixed-seed counter-based splitmix64, no `rng`, no `chrono` seeding, no `std` distributions (they differ between standard library implementations).
 - `n = 2e5` for O(log n) operations; other complexity classes pick a size in the same time band and say so.
-- Measure a pass that draws the identical stream but touches nothing, and subtract it — the generator is not free.
+- Measure a pass that draws the identical stream but touches nothing, and report it beside the total — the generator is not free.
 - Accumulate results into a printed checksum, so the optimizer keeps the work and matching checksums prove the run was deterministic.
 - One untimed warm-up pass on a smaller instance.
 - Report the fastest repetition and the spread across them.

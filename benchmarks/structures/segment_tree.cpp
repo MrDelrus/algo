@@ -1,20 +1,21 @@
 // Speed benchmark for algo::data_structures::segment_tree.
 //
-// Measures throughput only — correctness lives in tests, not here. Fully deterministic: the
-// operation stream comes from a counter-based splitmix64 with a fixed seed, so every run of
-// this binary performs exactly the same work in exactly the same order. No std distribution is
-// used anywhere, because std distributions are not specified to produce identical output
-// across standard library implementations.
+// Measures throughput only — correctness lives in tests. Fully deterministic: the operation
+// stream comes from a counter-based splitmix64 with a fixed seed, so every run of this binary
+// performs exactly the same work in exactly the same order. No std distribution is used
+// anywhere, because std distributions are not specified to produce identical output across
+// standard library implementations.
+//
+// Each scenario reports one number: the wall time of the whole mix. Splitting that total across
+// operation kinds was tried and dropped. The jitter between two passes of 2e7 operations is a
+// few percent of the pass, and dividing that by the calls of a one-in-ten operation leaves an
+// uncertainty of several nanoseconds per call — larger than the operations being measured. What
+// an individual operation costs is what its complexity says it costs.
 //
 // The stream is not precomputed: 2e7 operations would cost hundreds of megabytes, well past
-// what a judge grants. It is generated inside the measured loop instead, and the generator's
-// own cost is measured separately so it can be subtracted rather than silently attributed to
-// the structure.
-//
-// Per-operation timings come from replaying the identical stream with a mask that enables one
-// operation kind at a time. Every pass draws the same numbers in the same order, so the only
-// difference between two passes is the tree work they perform. Subtracting the pass with an
-// empty mask leaves the cost of that operation alone.
+// what a judge grants. It is generated inside the measured loop instead, and a pass that draws
+// the identical stream while touching no tree is measured alongside, so the harness cost is
+// visible rather than silently attributed to the structure.
 //
 // Build and run through benchmarks/run.sh, which pins resources in a container.
 
@@ -45,9 +46,6 @@ enum operation_kind : std::size_t {
   operation_query_all = 4,
   operation_kind_count = 5
 };
-
-const std::array<std::string, operation_kind_count> operation_names = {"set", "combine_at", "get",
-                                                                       "query", "query_all"};
 
 class random_source {
  public:
@@ -91,11 +89,10 @@ std::vector<std::int64_t> make_initial_values(std::size_t size) {
   return values;
 }
 
-// Replays the scenario's stream. Random numbers are always drawn, whatever the mask says, so
-// every mask walks the identical stream; the mask only decides which calls reach the tree.
-std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, std::uint64_t enabled,
-                     std::size_t size, std::size_t operations,
-                     std::array<std::size_t, operation_kind_count>& counts) {
+// Replays the scenario's stream. With `touch_tree` false the same numbers are drawn in the same
+// order and nothing reaches the tree, which is what the generator row measures.
+std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, bool touch_tree,
+                     std::size_t size, std::size_t operations) {
   random_source source(seed);
   std::size_t pinned_position = plan.single_position ? source.below(size) : 0;
   std::uint64_t checksum = 0;
@@ -108,9 +105,6 @@ std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, std::uint
       ++kind;
       threshold += plan.shares[kind];
     }
-    ++counts[kind];
-
-    bool execute = ((enabled >> kind) & 1) != 0;
 
     if (kind == operation_query) {
       std::size_t first = source.below(size + 1);
@@ -120,14 +114,14 @@ std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, std::uint
         first = second;
         second = swapped;
       }
-      if (execute) {
+      if (touch_tree) {
         checksum += static_cast<std::uint64_t>(tree.query(first, second));
       }
       continue;
     }
 
     if (kind == operation_query_all) {
-      if (execute) {
+      if (touch_tree) {
         checksum += static_cast<std::uint64_t>(tree.query_all());
       }
       continue;
@@ -135,14 +129,14 @@ std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, std::uint
 
     std::size_t position = plan.single_position ? pinned_position : source.below(size);
     if (kind == operation_get) {
-      if (execute) {
+      if (touch_tree) {
         checksum += static_cast<std::uint64_t>(tree.get(position));
       }
       continue;
     }
 
     std::int64_t value = source.value();
-    if (execute) {
+    if (touch_tree) {
       if (kind == operation_set) {
         tree.set(position, value);
       } else {
@@ -154,34 +148,31 @@ std::uint64_t replay(ds::sum_segment_tree& tree, const scenario& plan, std::uint
   return checksum;
 }
 
-struct timing {
+struct result {
   double best_milliseconds = 0.0;
   double worst_milliseconds = 0.0;
   std::uint64_t checksum = 0;
-  std::array<std::size_t, operation_kind_count> counts = {};
 };
 
 // The reported figure is the fastest run. Every repetition performs bitwise identical work, so
 // the differences between them come from outside the process, and the fastest run is the one
 // that suffered the least interference. The spread between fastest and slowest is printed too,
 // so a noisy machine cannot pass itself off as a clean measurement.
-timing measure(const scenario& plan, std::uint64_t enabled,
-               const std::vector<std::int64_t>& initial, std::size_t size, std::size_t operations) {
-  timing result;
+result measure(const scenario& plan, bool touch_tree, const std::vector<std::int64_t>& initial,
+               std::size_t size, std::size_t operations) {
+  result measured;
   std::vector<double> timings;
   for (std::size_t repetition = 0; repetition < repetition_count; ++repetition) {
     ds::sum_segment_tree tree(initial);
-    std::array<std::size_t, operation_kind_count> counts = {};
     auto started = std::chrono::steady_clock::now();
-    result.checksum = replay(tree, plan, enabled, size, operations, counts);
+    measured.checksum = replay(tree, plan, touch_tree, size, operations);
     auto finished = std::chrono::steady_clock::now();
     timings.push_back(std::chrono::duration<double, std::milli>(finished - started).count());
-    result.counts = counts;
   }
   std::sort(timings.begin(), timings.end());
-  result.best_milliseconds = timings.front();
-  result.worst_milliseconds = timings.back();
-  return result;
+  measured.best_milliseconds = timings.front();
+  measured.worst_milliseconds = timings.back();
+  return measured;
 }
 
 double measure_build(const std::vector<std::int64_t>& initial) {
@@ -201,37 +192,24 @@ double measure_build(const std::vector<std::int64_t>& initial) {
   return timings.front();
 }
 
+void print_row(const std::string& label, const result& measured, std::size_t operations) {
+  double spread = 100.0 * (measured.worst_milliseconds - measured.best_milliseconds) /
+                  measured.best_milliseconds;
+  std::cout << std::left << std::setw(14) << label << std::right << std::fixed
+            << std::setprecision(2) << std::setw(10) << measured.best_milliseconds << " ms"
+            << std::setw(9) << std::setprecision(1)
+            << measured.best_milliseconds * 1000000.0 / static_cast<double>(operations) << " ns/op"
+            << std::setw(8) << std::setprecision(1) << spread << "% spread\n";
+}
+
 void run_scenario(const scenario& plan, const std::vector<std::int64_t>& initial) {
   std::cout << "\n" << plan.title << "\n" << plan.description << "\n\n";
 
-  timing empty = measure(plan, 0, initial, tree_size, operation_count);
-  timing full = measure(plan, ~std::uint64_t(0), initial, tree_size, operation_count);
+  result full = measure(plan, true, initial, tree_size, operation_count);
+  result generator = measure(plan, false, initial, tree_size, operation_count);
 
-  std::cout << std::left << std::setw(14) << "total" << std::right << std::fixed
-            << std::setprecision(2) << std::setw(10) << full.best_milliseconds << " ms"
-            << std::setw(9) << std::setprecision(1)
-            << full.best_milliseconds * 1000000.0 / static_cast<double>(operation_count) << " ns/op"
-            << std::setw(8) << std::setprecision(1)
-            << 100.0 * (full.worst_milliseconds - full.best_milliseconds) / full.best_milliseconds
-            << "% spread\n";
-  std::cout << std::left << std::setw(14) << "generator" << std::right << std::setw(10)
-            << std::setprecision(2) << empty.best_milliseconds << " ms" << std::setw(9)
-            << std::setprecision(1)
-            << empty.best_milliseconds * 1000000.0 / static_cast<double>(operation_count)
-            << " ns/op\n\n";
-
-  std::cout << std::left << std::setw(14) << "operation" << std::right << std::setw(12) << "calls"
-            << std::setw(13) << "ns per call" << '\n';
-  for (std::size_t kind = 0; kind < operation_kind_count; ++kind) {
-    if (full.counts[kind] == 0) {
-      continue;
-    }
-    timing isolated = measure(plan, std::uint64_t(1) << kind, initial, tree_size, operation_count);
-    double nanoseconds = (isolated.best_milliseconds - empty.best_milliseconds) * 1000000.0 /
-                         static_cast<double>(full.counts[kind]);
-    std::cout << std::left << std::setw(14) << operation_names[kind] << std::right << std::setw(12)
-              << full.counts[kind] << std::setw(13) << std::setprecision(1) << nanoseconds << '\n';
-  }
+  print_row("total", full, operation_count);
+  print_row("generator", generator, operation_count);
   std::cout << "\nchecksum " << full.checksum << '\n';
 }
 
@@ -260,12 +238,12 @@ int main() {
 
   std::vector<std::int64_t> warmup_values = make_initial_values(warmup_tree_size);
   for (const scenario& plan : scenarios) {
-    measure(plan, ~std::uint64_t(0), warmup_values, warmup_tree_size, warmup_operation_count);
+    measure(plan, true, warmup_values, warmup_tree_size, warmup_operation_count);
   }
 
   std::vector<std::int64_t> values = make_initial_values(tree_size);
 
-  std::cout << "segment_tree<sum_monoid<int64_t>>\n"
+  std::cout << "ds::sum_segment_tree\n"
             << "n = " << tree_size << ", operations = " << operation_count << ", best of "
             << repetition_count << " runs\n\n"
             << std::left << std::setw(14) << "build" << std::right << std::fixed

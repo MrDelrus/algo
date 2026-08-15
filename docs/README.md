@@ -1,18 +1,18 @@
 # Documentation index
 
-One page per component. Every page has the same sections: summary, complexity, API, usage, notes, related.
+One page per component. Every page has the same sections: summary, complexity, API, usage, notes, performance, related. Measured numbers live on the component's own page — `benchmarks/` holds only the code that produces them.
 
 ## Data structures — `algo::data_structures`, alias `ds`
 
-| Component | Documentation | Benchmark | Tests |
-| --- | --- | --- | --- |
-| `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [results](../benchmarks/structures/segment_tree.md) | [source](../tests/structures/segment_tree.cpp) |
+| Component | Documentation | Tests |
+| --- | --- | --- |
+| `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [source](../tests/structures/segment_tree.cpp) |
 
 ## Graphs — `algo::graphs`, alias `gr`
 
-| Component | Documentation | Benchmark | Tests |
-| --- | --- | --- | --- |
-| _none yet_ | | | |
+| Component | Documentation | Tests |
+| --- | --- | --- |
+| _none yet_ | | |
 
 ## Conventions
 
