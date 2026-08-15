@@ -197,9 +197,8 @@ void print_row(const std::string& label, const result& measured, std::size_t ope
                   measured.best_milliseconds;
   std::cout << std::left << std::setw(14) << label << std::right << std::fixed
             << std::setprecision(2) << std::setw(10) << measured.best_milliseconds << " ms"
-            << std::setw(9) << std::setprecision(1)
-            << measured.best_milliseconds * 1000000.0 / static_cast<double>(operations) << " ns/op"
-            << std::setw(8) << std::setprecision(1) << spread << "% spread\n";
+            << std::setw(12) << operations << " operations" << std::setw(8) << std::setprecision(1)
+            << spread << "% spread\n";
 }
 
 void run_scenario(const scenario& plan, const std::vector<std::int64_t>& initial) {

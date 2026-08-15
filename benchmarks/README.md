@@ -34,5 +34,5 @@ The container pins GCC 13.2.0 and `-std=c++20 -O2 -static`, matching Codeforces.
 - Measure a pass that draws the identical stream but touches nothing, and report it beside the total — the generator is not free.
 - Accumulate results into a printed checksum, so the optimizer keeps the work and matching checksums prove the run was deterministic.
 - One untimed warm-up pass on a smaller instance.
-- Report the fastest repetition and the spread across them.
+- Report the fastest repetition, the operation count, and the spread across repetitions. No per-operation averages — see the first rule.
 - A hand-written replacement for something in `std` is kept only on a measured 2x win.
