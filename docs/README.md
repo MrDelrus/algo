@@ -6,6 +6,7 @@ One page per component. Every page has the same sections: summary, complexity, A
 
 | Component | Documentation | Tests |
 | --- | --- | --- |
+| `disjoint_set_union` | [structures/disjoint_set_union.md](structures/disjoint_set_union.md) | [source](../tests/structures/disjoint_set_union.cpp) |
 | `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [source](../tests/structures/segment_tree.cpp) |
 
 ## Graphs — `algo::graphs`, alias `gr`

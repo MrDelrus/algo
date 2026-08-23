@@ -190,6 +190,107 @@ class segment_tree {
 
 }  // namespace segment_trees
 
+namespace disjoint_set_unions {
+
+// Disjoint set union with union by size and full path compression.
+// Construction O(n), every query and merge O(alpha(n)) amortised. Memory 2n values.
+//
+// Union by size rather than by rank: the bound is identical, both keep tree height O(log n)
+// before compression, but a size is something problems ask for and a rank is not. After
+// compression a rank stops being a real height anyway, while a size stays exact.
+//
+// get_ancestor rewrites the path it walks, yet it is const. Compression changes how the same
+// partition is stored, never which partition it is, so it is invisible in the mathematical
+// model the class presents. The storage is mutable for exactly that reason.
+//
+// Every entry point validates its arguments and throws std::out_of_range on misuse.
+class disjoint_set_union {
+ public:
+  disjoint_set_union() = default;
+
+  explicit disjoint_set_union(std::size_t size)
+      : _parent(size), _component_size(size, 1), _component_count(size) {
+    for (std::size_t vertex = 0; vertex < size; ++vertex) {
+      _parent[vertex] = vertex;
+    }
+  }
+
+  std::size_t get_ancestor(std::size_t vertex) const {
+    check_vertex(vertex, "disjoint_set_union::get_ancestor");
+    return find_root(vertex);
+  }
+
+  // Joins the two components. Returns false when the vertices already shared one, which is what
+  // tells Kruskal that an edge closes a cycle.
+  bool merge(std::size_t first, std::size_t second) {
+    check_vertex(first, "disjoint_set_union::merge");
+    check_vertex(second, "disjoint_set_union::merge");
+    std::size_t first_root = find_root(first);
+    std::size_t second_root = find_root(second);
+    if (first_root == second_root) {
+      return false;
+    }
+    if (_component_size[first_root] < _component_size[second_root]) {
+      std::size_t swapped = first_root;
+      first_root = second_root;
+      second_root = swapped;
+    }
+    _parent[second_root] = first_root;
+    _component_size[first_root] += _component_size[second_root];
+    --_component_count;
+    return true;
+  }
+
+  bool is_connected(std::size_t first, std::size_t second) const {
+    check_vertex(first, "disjoint_set_union::is_connected");
+    check_vertex(second, "disjoint_set_union::is_connected");
+    return find_root(first) == find_root(second);
+  }
+
+  std::size_t get_component_size(std::size_t vertex) const {
+    check_vertex(vertex, "disjoint_set_union::get_component_size");
+    return _component_size[find_root(vertex)];
+  }
+
+  std::size_t get_component_count() const {
+    return _component_count;
+  }
+
+ private:
+  // Two passes: walk up to the root, then walk the same path again attaching every vertex
+  // straight to it. No recursion — a path can be as long as the structure is wide, and a
+  // Codeforces stack does not survive that.
+  std::size_t find_root(std::size_t vertex) const {
+    std::size_t root = vertex;
+    while (_parent[root] != root) {
+      root = _parent[root];
+    }
+    while (_parent[vertex] != root) {
+      std::size_t next = _parent[vertex];
+      _parent[vertex] = root;
+      vertex = next;
+    }
+    return root;
+  }
+
+  [[noreturn]] static void reject_vertex(const char* where, std::size_t vertex, std::size_t size) {
+    throw std::out_of_range(std::string(where) + ": vertex " + std::to_string(vertex) +
+                            " is out of range for a structure of size " + std::to_string(size));
+  }
+
+  void check_vertex(std::size_t vertex, const char* where) const {
+    if (vertex >= _parent.size()) {
+      reject_vertex(where, vertex, _parent.size());
+    }
+  }
+
+  mutable std::vector<std::size_t> _parent;
+  std::vector<std::size_t> _component_size;
+  std::size_t _component_count = 0;
+};
+
+}  // namespace disjoint_set_unions
+
 // Every structure the library offers, gathered in one place. Reach past an alias only for a
 // monoid that has no preset: ds::segment_trees::segment_tree<my_monoid>.
 
@@ -197,6 +298,8 @@ using sum_segment_tree = segment_trees::segment_tree<sum_monoid<std::int64_t>>;
 using min_segment_tree = segment_trees::segment_tree<min_monoid<std::int64_t>>;
 using max_segment_tree = segment_trees::segment_tree<max_monoid<std::int64_t>>;
 using gcd_segment_tree = segment_trees::segment_tree<gcd_monoid<std::int64_t>>;
+
+using disjoint_set_union = disjoint_set_unions::disjoint_set_union;
 
 }  // namespace data_structures
 
