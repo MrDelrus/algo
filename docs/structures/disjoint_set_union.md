@@ -89,7 +89,7 @@ bool everything_is_one_piece = structure.get_component_count() == 1;
 
 **Union by size, not by rank.** The bound is identical: Tarjan and van Leeuwen showed that any balanced union rule combined with any path-shortening rule gives O(α(n)), because both rules keep tree height O(log n) even before compression. Size wins on usefulness — problems ask how big a component is, and no problem asks for a rank. After compression a rank is no longer a real height anyway, while a size stays exact.
 
-**Both heuristics are load-bearing.** Union by size alone gives O(log n). Path compression alone gives O(log n). Only together do they give α, and the timing gate has a scenario built to punish losing either.
+**Both heuristics are load-bearing.** Union by size alone gives O(log n). Path compression alone gives O(log n). Only together do they give α.
 
 **No recursion.** The path to a root is walked with two loops. A recursive `find` on 2e5 vertices overflows the Codeforces stack, and that failure looks like a runtime error on a random test rather than a stack trace.
 
@@ -101,4 +101,3 @@ bool everything_is_one_piece = structure.get_component_count() == 1;
 
 - [documentation index](../README.md)
 - [tests](../../tests/structures/disjoint_set_union.cpp)
-- [timing gate](../../benchmarks/structures/disjoint_set_union.cpp)
