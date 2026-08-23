@@ -9,19 +9,33 @@ A single-file competitive programming library targeting Codeforces. `main.cpp` i
 ## Layout
 
 ```
-main.cpp                  submission file — template + algo library + solve/main
-.clang-format             Google style, two-space indent, 100 columns
-scripts/format.sh         formats library code only
-docs/graphs/              docs for algo::graphs
-docs/structures/          docs for algo::data_structures
-benchmarks/               deterministic performance tests + results
-.github/workflows/ci.yml  build, benchmarks, formatting, style rules
-MEMORY.md                 untracked, personal
+main.cpp                     submission file — template + algo library + solve/main
+.clang-format                Google style, two-space indent, 100 columns
+scripts/format.sh            formats library code only
+scripts/extract_library.sh   lifts namespace algo out of main.cpp into a header
+docs/README.md               the index of every component — the only index
+docs/structures/             one page per data structure
+docs/graphs/                 one page per graph algorithm
+benchmarks/structures/       .cpp that measures; results go in the doc page
+benchmarks/graphs/
+tests/harness.hpp            shared assertion helpers
+tests/structures/            correctness tests, one file per component
+tests/graphs/
+.github/workflows/ci.yml     build, benchmarks, formatting, style rules
+MEMORY.md                    untracked, personal
 ```
+
+`docs/README.md` is the single index. The root `README.md` points at it and stays short; there are no per-area index files, because three indexes drift apart by the third component.
 
 ## Namespaces
 
 The library lives in `namespace algo`, split into `algo::graphs` and `algo::data_structures`. Every component belongs to one of those two.
+
+Inside an area, a component family gets its own namespace, named in the plural: `segment_trees` holds `segment_tree` and `lazy_segment_tree`. Namespaces never carry a leading underscore — that marks a private member, and a family namespace is not private, it is what a caller types to reach the core with a custom parameter. Genuinely internal helpers go in a nested `detail` namespace instead.
+
+Shared vocabulary — monoids and anything else several families consume — stays one level up, directly in the area namespace, so a single type serves every structure that takes it.
+
+**Aliases are declared last**, after every family namespace in the area is closed, gathered in one block. That block is the list of what the library actually offers, and keeping it in one place is the point.
 
 Once components exist, short aliases are declared in `main.cpp` below the library block with `namespace gr = algo::graphs;` and `namespace ds = algo::data_structures;` — namespace aliases need `namespace`, not `using`.
 
@@ -37,7 +51,8 @@ Once components exist, short aliases are declared in `main.cpp` below the librar
 - **0-indexed** everywhere unless a structure is inherently 1-indexed (Fenwick internals); the public API stays 0-indexed regardless.
 - **Comments are for invariants and complexity**, not for restating code. Each public component carries a one-line header comment: what it does plus its complexities.
 - **No `using namespace std;` inside `namespace algo`** — the library must survive being pasted anywhere. `main.cpp`'s top-level template already has it.
-- Prefer flat `std::vector` storage and indices over pointer-based nodes. No exceptions, no RTTI, no virtual dispatch in hot paths.
+- Prefer flat `std::vector` storage and indices over pointer-based nodes. No RTTI, no virtual dispatch.
+- **Structures validate their arguments and throw** `std::out_of_range` or `std::invalid_argument` on misuse. A satisfied check is one predicted branch; the message is built only on the failing path. Debugging an index bug at speed is worth far more than the branch costs.
 - Correctness first, then constant factor. A correctness invariant is never traded for speed without the trade being written down in the doc page's Notes.
 
 ## Markdown style
@@ -46,22 +61,31 @@ Paragraphs are single lines. Never hard-wrap prose at a column — let the edito
 
 ## Documentation
 
-Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named after the component in `kebab-case.md`, with these sections:
+Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named exactly after the component — `segment_tree.md`, matching the type it documents — with these sections:
 
 1. **Summary** — one sentence.
 2. **Complexity** — build / query / update, time and memory.
 3. **API** — signatures with parameter semantics and index conventions.
 4. **Usage** — a short, real snippet.
 5. **Notes** — invariants, precision limits, overflow risks, when *not* to use it.
-6. **Related** — links to sibling pages.
+6. **Performance** — the benchmark scenarios and their measured totals.
+7. **Related** — links to the index, tests, and benchmark source.
 
-A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and the `docs/<area>/README.md` index table stays in sync.
+A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 
 ## Benchmarks
 
-Rules live in `benchmarks/README.md`. The load-bearing ones: benchmarks are fully deterministic (no `rng`, no `chrono` seeding, fixed-seed data generation), `n = 2e5` is the standard size for O(n log n) structures, query results are accumulated into a printed checksum so the optimizer cannot delete the measured work, and results are always reported with machine, compiler, and flags.
+`benchmarks/` mirrors `docs/`: one `.cpp` per component. **Results are recorded in the component's doc page, under Performance** — a component has one page and its numbers belong on it. Rules live in `benchmarks/README.md`; run them with `benchmarks/run.sh`, which pins resources in a container.
+
+Each scenario reports one number, its total. Do not split a total across operation kinds: the jitter between two passes is a few percent, and divided by the calls of a minority operation that leaves an uncertainty larger than the operation itself.
 
 An std component is only replaced by a hand-written one when a benchmark shows at least a 2x win.
+
+## Tests
+
+`tests/` mirrors `docs/` too. Run them with `scripts/run_tests.sh`; everything compiles with ASan and UBSan. What a test file owes is in `tests/README.md` — the short version: check against an obvious reference, be exhaustive for `n <= 32`, hit the power-of-two boundaries, include a non-commutative monoid, cover what must throw *and* what must not, and carry a couple of deterministic cases at `n` near 1e3 verified against a quadratic reference.
+
+A component is unfinished without tests, exactly as it is unfinished without a doc page.
 
 ## Build
 

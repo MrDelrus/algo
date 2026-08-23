@@ -34,16 +34,27 @@ jobs:
       - name: build every benchmark
         run: |
           shopt -s nullglob
-          sources=(benchmarks/*.cpp)
+          sources=(benchmarks/*/*.cpp)
           if [ ${#sources[@]} -eq 0 ]; then
             echo "no benchmarks yet"
             exit 0
           fi
+          scripts/extract_library.sh benchmarks/generated/algo_library.hpp
           for source in "${sources[@]}"; do
             echo "::group::$source"
-            g++ -std=c++20 -O2 -Wall -Wextra -Werror -o "/tmp/$(basename "$source" .cpp)" "$source"
+            g++ -std=c++20 -O2 -Wall -Wextra -Werror -I benchmarks/generated \
+              -o "/tmp/$(basename "$source" .cpp)" "$source"
             echo "::endgroup::"
           done
+
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: run every test under sanitizers
+        run: scripts/run_tests.sh
 
   format:
     name: clang-format
@@ -68,13 +79,18 @@ jobs:
       - name: no built-in integer types in library code
         run: |
           shopt -s nullglob
-          sources=(benchmarks/*.cpp)
+          sources=(benchmarks/*/*.cpp tests/*/*.cpp tests/*.hpp)
           sed -n '/^namespace algo {$/,/^}  \/\/ namespace algo$/p' main.cpp > /tmp/library_region.cpp
           if [ ! -s /tmp/library_region.cpp ]; then
             echo "::error::could not locate the 'namespace algo' block in main.cpp"
             exit 1
           fi
-          if grep -nE '(^|[^_[:alnum:]])(long long|unsigned|short|\bint\b)([^_[:alnum:]]|$)' /tmp/library_region.cpp "${sources[@]}"; then
+          # `int main()` is the one signature the language forces on us, so benchmarks may
+          # spell it. Nothing else is exempt.
+          violations=$(grep -nE '(^|[^_[:alnum:]])(long long|unsigned|short|\bint\b)([^_[:alnum:]]|$)' \
+            /tmp/library_region.cpp "${sources[@]}" | grep -v 'int main() {$' || true)
+          if [ -n "$violations" ]; then
+            echo "$violations"
             echo "::error::built-in integer types are banned; use std::int64_t / std::int32_t / std::size_t / std::uint64_t"
             exit 1
           fi
