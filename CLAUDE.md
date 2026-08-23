@@ -16,7 +16,7 @@ scripts/extract_library.sh   lifts namespace algo out of main.cpp into a header
 docs/README.md               the index of every component — the only index
 docs/structures/             one page per data structure
 docs/graphs/                 one page per graph algorithm
-benchmarks/structures/       .cpp that measures; results go in the doc page
+benchmarks/structures/       one timing gate per component, enforced by CI
 benchmarks/graphs/
 tests/harness.hpp            shared assertion helpers
 tests/structures/            correctness tests, one file per component
@@ -68,16 +68,15 @@ Every component has one Markdown page under `docs/graphs/` or `docs/structures/`
 3. **API** — signatures with parameter semantics and index conventions.
 4. **Usage** — a short, real snippet.
 5. **Notes** — invariants, precision limits, overflow risks, when *not* to use it.
-6. **Performance** — the benchmark scenarios and their measured totals.
-7. **Related** — links to the index, tests, and benchmark source.
+6. **Related** — links to the index, tests, and the timing gate.
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 
 ## Benchmarks
 
-`benchmarks/` mirrors `docs/`: one `.cpp` per component. **Results are recorded in the component's doc page, under Performance** — a component has one page and its numbers belong on it. Rules live in `benchmarks/README.md`; run them with `benchmarks/run.sh`, which pins resources in a container.
+`benchmarks/` mirrors `docs/`: one `.cpp` per component. They are **timing gates, not reports** — each runs a fixed workload against a time budget and exits non-zero when it no longer fits, and CI fails the build. No numbers are published in the documentation: a recorded number goes stale as soon as nobody re-measures it, a gate cannot.
 
-Each scenario reports one number, its total. Do not split a total across operation kinds: the jitter between two passes is a few percent, and divided by the calls of a minority operation that leaves an uncertainty larger than the operation itself.
+`n = 2e5` with 2e5 operations and a 100 ms budget for O(log n) structures. Rules live in `benchmarks/README.md`.
 
 An std component is only replaced by a hand-written one when a benchmark shows at least a 2x win.
 
@@ -105,6 +104,6 @@ Never run bare `clang-format` on `main.cpp` — it would reformat the template. 
 `.github/workflows/ci.yml` runs on every push and pull request, and must stay green:
 
 - **build** — `main.cpp` with `-Werror`, plus an ASan/UBSan build and a smoke run.
-- **benchmarks** — every `benchmarks/*.cpp` compiles with `-Werror`.
+- **benchmarks** — timing gates, run only for what the diff touched: a change to `main.cpp` runs all of them, a change to one benchmark runs that one, a diff touching neither skips the job.
 - **clang-format** — `scripts/format.sh --check`.
 - **style rules** — extracts the `namespace algo { ... }` block from `main.cpp` and greps it, plus the benchmarks, for built-in integer types.
