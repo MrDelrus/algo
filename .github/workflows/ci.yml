@@ -25,67 +25,6 @@ jobs:
       - name: smoke run
         run: printf '0\n' | /tmp/main
 
-  benchmarks:
-    name: benchmarks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      # Benchmarks are timing gates, not reports, so running the untouched ones would only
-      # burn minutes and invite flaky reds. A change to main.cpp affects every structure and
-      # therefore runs everything; a change to one benchmark runs only that one.
-      - name: decide what to run
-        id: select
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          all=(benchmarks/*/*.cpp)
-          if [ ${#all[@]} -eq 0 ]; then
-            echo "selected=" >> "$GITHUB_OUTPUT"
-            echo "no benchmarks yet"
-            exit 0
-          fi
-
-          base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
-             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "no usable base commit, running every benchmark"
-            printf 'selected=%s\n' "${all[*]}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          changed=$(git diff --name-only "$base" HEAD)
-          echo "changed files:"
-          echo "$changed" | sed 's/^/  /'
-
-          if echo "$changed" | grep -qE '^(main\.cpp|scripts/extract_library\.sh|\.github/workflows/ci\.yml)$'; then
-            echo "the library or the harness moved, running every benchmark"
-            printf 'selected=%s\n' "${all[*]}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          selected=$(echo "$changed" | grep -E '^benchmarks/.*\.cpp$' || true)
-          printf 'selected=%s\n' "$(echo $selected)" >> "$GITHUB_OUTPUT"
-
-      - name: run the selected benchmarks
-        if: steps.select.outputs.selected != ''
-        run: |
-          set -euo pipefail
-          scripts/extract_library.sh benchmarks/generated/algo_library.hpp
-          for source in ${{ steps.select.outputs.selected }}; do
-            echo "::group::$source"
-            g++ -std=c++20 -O2 -Wall -Wextra -Werror -I benchmarks/generated \
-              -o "/tmp/$(basename "$source" .cpp)" "$source"
-            "/tmp/$(basename "$source" .cpp)"
-            echo "::endgroup::"
-          done
-
-      - name: nothing to run
-        if: steps.select.outputs.selected == ''
-        run: echo "no benchmark and no library change in this diff"
-
   tests:
     name: tests
     runs-on: ubuntu-latest
@@ -118,14 +57,14 @@ jobs:
       - name: no built-in integer types in library code
         run: |
           shopt -s nullglob
-          sources=(benchmarks/*/*.cpp tests/*/*.cpp tests/*.hpp)
+          sources=(tests/*/*.cpp tests/*.hpp)
           sed -n '/^namespace algo {$/,/^}  \/\/ namespace algo$/p' main.cpp > /tmp/library_region.cpp
           if [ ! -s /tmp/library_region.cpp ]; then
             echo "::error::could not locate the 'namespace algo' block in main.cpp"
             exit 1
           fi
-          # `int main()` is the one signature the language forces on us, so benchmarks may
-          # spell it. Nothing else is exempt.
+          # `int main()` is the one signature the language forces on us, so a test may spell
+          # it. Nothing else is exempt.
           violations=$(grep -nE '(^|[^_[:alnum:]])(long long|unsigned|short|\bint\b)([^_[:alnum:]]|$)' \
             /tmp/library_region.cpp "${sources[@]}" | grep -v 'int main() {$' || true)
           if [ -n "$violations" ]; then

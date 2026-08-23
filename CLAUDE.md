@@ -16,12 +16,10 @@ scripts/extract_library.sh   lifts namespace algo out of main.cpp into a header
 docs/README.md               the index of every component — the only index
 docs/structures/             one page per data structure
 docs/graphs/                 one page per graph algorithm
-benchmarks/structures/       one timing gate per component, enforced by CI
-benchmarks/graphs/
 tests/harness.hpp            shared assertion helpers
 tests/structures/            correctness tests, one file per component
 tests/graphs/
-.github/workflows/ci.yml     build, benchmarks, formatting, style rules
+.github/workflows/ci.yml     build, tests, formatting, style rules
 MEMORY.md                    untracked, personal
 ```
 
@@ -72,13 +70,11 @@ Every component has one Markdown page under `docs/graphs/` or `docs/structures/`
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 
-## Benchmarks
+## Speed
 
-`benchmarks/` mirrors `docs/`: one `.cpp` per component. They are **timing gates, not reports** — each runs a fixed workload against a time budget and exits non-zero when it no longer fits, and CI fails the build. No numbers are published in the documentation: a recorded number goes stale as soon as nobody re-measures it, a gate cannot.
+Complexity is the contract, and it is stated on every doc page. Measurements are not kept in the repository: timing gates were tried and removed because maintaining them cost more attention than the regressions they caught were worth.
 
-`n = 2e5` with 2e5 operations and a 100 ms budget for O(log n) structures. Rules live in `benchmarks/README.md`.
-
-An std component is only replaced by a hand-written one when a benchmark shows at least a 2x win.
+One consequence to be honest about — **replacing an std component is on hold.** That decision needed a measured 2x win, and there is nothing left to measure with. A rewrite of something `std` already provides waits until benchmarking comes back.
 
 ## Tests
 
@@ -97,13 +93,12 @@ g++ -std=c++20 -g -fsanitize=address,undefined -o /tmp/main_dbg main.cpp
 
 Formatting rules apply **only inside `namespace algo`**. The competitive template around it — includes, macros, aliases, `solve()`, `main()` — is hand-arranged and stays exactly as written; the blank lines inside `solve()` are deliberate typing room, not slop to clean up.
 
-Never run bare `clang-format` on `main.cpp` — it would reformat the template. Run `scripts/format.sh` instead: it locates the namespace body by the lines `namespace algo {` and `}  // namespace algo` and passes only that line range to clang-format, then formats the benchmarks whole. Both those lines are load-bearing and must stay exactly as they are — the formatter and the CI style check key off them, and the script fails loudly if either is missing or duplicated.
+Never run bare `clang-format` on `main.cpp` — it would reformat the template. Run `scripts/format.sh` instead: it locates the namespace body by the lines `namespace algo {` and `}  // namespace algo` and passes only that line range to clang-format, then formats the tests whole. Both those lines are load-bearing and must stay exactly as they are — the formatter and the CI style check key off them, and the script fails loudly if either is missing or duplicated.
 
 ## CI
 
 `.github/workflows/ci.yml` runs on every push and pull request, and must stay green:
 
 - **build** — `main.cpp` with `-Werror`, plus an ASan/UBSan build and a smoke run.
-- **benchmarks** — timing gates, run only for what the diff touched: a change to `main.cpp` runs all of them, a change to one benchmark runs that one, a diff touching neither skips the job.
 - **clang-format** — `scripts/format.sh --check`.
-- **style rules** — extracts the `namespace algo { ... }` block from `main.cpp` and greps it, plus the benchmarks, for built-in integer types.
+- **style rules** — extracts the `namespace algo { ... }` block from `main.cpp` and greps it, plus the tests, for built-in integer types.
