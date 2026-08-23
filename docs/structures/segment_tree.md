@@ -116,4 +116,3 @@ This is also why `combine_at` needs no inverse and works for `min`, `max`, and `
 
 - [documentation index](../README.md)
 - [tests](../../tests/structures/segment_tree.cpp)
-- [timing gate](../../benchmarks/structures/segment_tree.cpp)

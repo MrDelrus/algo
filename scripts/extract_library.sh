@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Extracts the algo namespace from main.cpp into a standalone header.
 #
-# main.cpp defines main(), so benchmarks cannot include it directly. Rather than keeping a
-# second copy of the library that would drift, they include the header this script produces.
-# main.cpp stays the single source of truth.
+# main.cpp defines main(), so tests cannot include it directly. Rather than keeping a second
+# copy of the library that would drift, they include the header this script produces. main.cpp
+# stays the single source of truth.
 #
 # Usage:
 #   scripts/extract_library.sh <output-header>
