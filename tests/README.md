@@ -1,10 +1,10 @@
 # Tests
 
-Correctness only — speed belongs to `benchmarks/`.
+Correctness. Speed is reasoned about as complexity and not measured here.
 
 ## Layout
 
-Mirrors `docs/` and `benchmarks/`: one directory per area, one file per component, plus a shared `harness.hpp`.
+Mirrors `docs/`: one directory per area, one file per component, plus a shared `harness.hpp`.
 
 ```
 tests/harness.hpp

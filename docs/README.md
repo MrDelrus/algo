@@ -1,6 +1,6 @@
 # Documentation index
 
-One page per component. Every page has the same sections: summary, complexity, API, usage, notes, related. Speed is not documented — it is enforced: `benchmarks/` holds a timing gate per component that CI fails when a structure stops being fast enough.
+One page per component. Every page has the same sections: summary, complexity, API, usage, notes, related. Speed is stated as complexity, not as measurements: a recorded number describes one afternoon on one machine, and nothing keeps it true.
 
 ## Data structures — `algo::data_structures`, alias `ds`
 
