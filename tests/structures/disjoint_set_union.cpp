@@ -232,6 +232,208 @@ void singletons_and_self_merges() {
   check_equal(empty_structure.get_component_count(), std::size_t(0), "no vertices, no components");
 }
 
+// Reading a structure through a const reference is the whole point of making the queries const,
+// and it is a property of the type rather than of any value, so it belongs in a test that would
+// stop compiling if it were lost.
+std::size_t count_connected_to(const ds::disjoint_set_union& structure, std::size_t size,
+                               std::size_t vertex) {
+  std::size_t count = 0;
+  for (std::size_t other = 0; other < size; ++other) {
+    count += structure.is_connected(vertex, other) ? 1 : 0;
+  }
+  return count;
+}
+
+void const_usability() {
+  testing::section("const usability");
+  testing::random_source source(seed ^ 0x6666666666666666ULL);
+
+  const std::size_t size = 100;
+  ds::disjoint_set_union built(size);
+  for (std::size_t round = 0; round < 60; ++round) {
+    built.merge(source.below(size), source.below(size));
+  }
+
+  const ds::disjoint_set_union& frozen = built;
+  for (std::size_t vertex = 0; vertex < size; ++vertex) {
+    check_equal(count_connected_to(frozen, size, vertex), frozen.get_component_size(vertex),
+                "a const reference answers, and agrees with itself, at " + std::to_string(vertex));
+    check_equal(frozen.get_ancestor(vertex), built.get_ancestor(vertex),
+                "the const and non-const views give the same ancestor");
+  }
+  check(frozen.get_component_count() > 0, "counting through a const reference works");
+}
+
+// The storage is mutable, which is exactly the situation where a shallow copy would go
+// unnoticed: both structures would answer correctly right up until one of them merged.
+void value_semantics() {
+  testing::section("value semantics");
+  testing::random_source source(seed ^ 0x7777777777777777ULL);
+
+  const std::size_t size = 64;
+  ds::disjoint_set_union original(size);
+  for (std::size_t round = 0; round < 30; ++round) {
+    original.merge(source.below(size), source.below(size));
+  }
+
+  ds::disjoint_set_union copy = original;
+  check_equal(copy.get_component_count(), original.get_component_count(),
+              "a copy starts with the same component count");
+
+  // Snapshot the original's whole relation, then collapse the copy. If the two shared storage
+  // the snapshot would stop describing the original, which is the failure `mutable` invites.
+  std::vector<bool> relation(size * size, false);
+  for (std::size_t first = 0; first < size; ++first) {
+    for (std::size_t second = 0; second < size; ++second) {
+      relation[first * size + second] = original.is_connected(first, second);
+    }
+  }
+  std::size_t original_count_before = original.get_component_count();
+
+  for (std::size_t vertex = 0; vertex + 1 < size; ++vertex) {
+    copy.merge(vertex, vertex + 1);
+  }
+  check_equal(copy.get_component_count(), std::size_t(1), "the copy collapsed to one component");
+  check_equal(original.get_component_count(), original_count_before,
+              "the original is untouched by merges in its copy");
+  for (std::size_t first = 0; first < size; ++first) {
+    for (std::size_t second = 0; second < size; ++second) {
+      check_equal(original.is_connected(first, second), relation[first * size + second],
+                  "the original's relation is unchanged, " + at(size, first, second));
+    }
+  }
+
+  // Compression in one must not reach the other either, and a copy taken before any path was
+  // read must answer exactly like one taken after every path was read.
+  ds::disjoint_set_union uncompressed(size);
+  testing::random_source replay(seed ^ 0x8888888888888888ULL);
+  for (std::size_t round = 0; round < 30; ++round) {
+    uncompressed.merge(replay.below(size), replay.below(size));
+  }
+  ds::disjoint_set_union before_reading = uncompressed;
+  for (std::size_t vertex = 0; vertex < size; ++vertex) {
+    uncompressed.get_ancestor(vertex);
+  }
+  ds::disjoint_set_union after_reading = uncompressed;
+  for (std::size_t first = 0; first < size; ++first) {
+    for (std::size_t second = 0; second < size; ++second) {
+      check_equal(
+          after_reading.is_connected(first, second), before_reading.is_connected(first, second),
+          "compression before a copy changes nothing it answers, " + at(size, first, second));
+    }
+  }
+
+  ds::disjoint_set_union moved = std::move(after_reading);
+  check_equal(moved.get_component_count(), before_reading.get_component_count(),
+              "a moved structure carries its partition across");
+}
+
+// Relations that must hold no matter which merges happened. These are cheap, and each one fails
+// differently: a drifting counter, a size read off a stale non-root, an asymmetric answer.
+void invariants_after_arbitrary_merges() {
+  testing::section("invariants after arbitrary merges");
+  testing::random_source source(seed ^ 0x9999999999999999ULL);
+
+  const std::size_t size = 200;
+  ds::disjoint_set_union structure(size);
+
+  for (std::size_t round = 0; round <= 3 * size; ++round) {
+    if (round > 0) {
+      structure.merge(source.below(size), source.below(size));
+    }
+
+    std::vector<std::size_t> ancestors(size);
+    for (std::size_t vertex = 0; vertex < size; ++vertex) {
+      ancestors[vertex] = structure.get_ancestor(vertex);
+    }
+
+    std::vector<bool> counted(size, false);
+    std::size_t distinct = 0;
+    std::size_t summed = 0;
+    for (std::size_t vertex = 0; vertex < size; ++vertex) {
+      if (!counted[ancestors[vertex]]) {
+        counted[ancestors[vertex]] = true;
+        ++distinct;
+        summed += structure.get_component_size(vertex);
+      }
+    }
+    check_equal(distinct, structure.get_component_count(),
+                "distinct ancestors equal the component count at round " + std::to_string(round));
+    check_equal(summed, size, "component sizes sum to n at round " + std::to_string(round));
+
+    for (std::size_t vertex = 0; vertex < size; ++vertex) {
+      std::size_t sharing = 0;
+      for (std::size_t other = 0; other < size; ++other) {
+        sharing += ancestors[other] == ancestors[vertex] ? 1 : 0;
+      }
+      check_equal(
+          structure.get_component_size(vertex), sharing,
+          "a size counts exactly the vertices sharing an ancestor, round " + std::to_string(round));
+      check(structure.is_connected(vertex, vertex), "connectedness is reflexive");
+    }
+  }
+}
+
+// The counter is the one piece of state not rebuilt from the parents, so it can drift silently.
+// Tie it to merge's own return value rather than to the reference.
+void counter_follows_merges() {
+  testing::section("the counter follows merges");
+  testing::random_source source(seed ^ 0xaaaaaaaaaaaaaaaaULL);
+
+  const std::size_t size = 80;
+  ds::disjoint_set_union structure(size);
+  check_equal(structure.get_component_count(), size, "an untouched structure has n components");
+
+  std::size_t expected = size;
+  for (std::size_t round = 0; round < 5 * size; ++round) {
+    std::size_t first = source.below(size);
+    std::size_t second = source.below(size);
+    bool joined = structure.merge(first, second);
+    if (joined) {
+      --expected;
+    }
+    check_equal(
+        structure.get_component_count(), expected,
+        "one successful merge removes exactly one component, round " + std::to_string(round));
+    check(!structure.merge(first, second), "merging the same pair again joins nothing");
+    check(!structure.merge(second, first), "and neither does merging it the other way");
+    check_equal(structure.get_component_count(), expected,
+                "a merge that joined nothing leaves the count alone");
+    check(structure.is_connected(first, second), "the pair is connected afterwards either way");
+    check_equal(structure.is_connected(first, second), structure.is_connected(second, first),
+                "connectedness is symmetric");
+  }
+  check_equal(expected, structure.get_component_count(), "the count never drifted");
+}
+
+void star_and_full_collapse() {
+  testing::section("star and full collapse");
+
+  // A star: one vertex absorbs every other. Union by size keeps attaching the singleton to the
+  // growing component rather than the reverse.
+  const std::size_t size = 500;
+  ds::disjoint_set_union star(size);
+  for (std::size_t vertex = 1; vertex < size; ++vertex) {
+    check(star.merge(0, vertex), "each spoke of a star joins something new");
+    check_equal(star.get_component_size(0), vertex + 1, "the star grows by one each time");
+    check_equal(star.get_component_count(), size - vertex, "and loses one component each time");
+  }
+  for (std::size_t vertex = 0; vertex < size; ++vertex) {
+    check_equal(star.get_component_size(vertex), size,
+                "every vertex of a collapsed structure reports the whole size");
+    check_equal(star.get_ancestor(vertex), star.get_ancestor(0),
+                "and shares one ancestor with every other");
+  }
+  check_equal(star.get_component_count(), std::size_t(1), "a star is one component");
+
+  // Self merges at scale must be inert.
+  ds::disjoint_set_union inert(100);
+  for (std::size_t round = 0; round < 1000; ++round) {
+    check(!inert.merge(round % 100, round % 100), "a self merge joins nothing");
+  }
+  check_equal(inert.get_component_count(), std::size_t(100), "and leaves every vertex alone");
+}
+
 void exception_paths() {
   testing::section("exception paths");
 
@@ -253,8 +455,12 @@ void exception_paths() {
   ds::disjoint_set_union empty_structure;
   check_throws<std::out_of_range>([&] { return empty_structure.get_ancestor(0); },
                                   "ancestor on a default constructed structure");
-  check_does_not_throw([&] { return empty_structure.get_component_count(); },
-                       "counting on a default constructed structure is fine");
+  check_throws<std::out_of_range>([&] { return empty_structure.merge(0, 0); },
+                                  "merging on a default constructed structure");
+  check_throws<std::out_of_range>([&] { return empty_structure.is_connected(0, 0); },
+                                  "is_connected on a default constructed structure");
+  check_equal(empty_structure.get_component_count(), std::size_t(0),
+              "a default constructed structure has no components");
 
   // The boundaries that must be accepted.
   check_does_not_throw([&] { return structure.get_ancestor(4); }, "the last valid vertex");
@@ -312,6 +518,11 @@ void large_against_quadratic() {
 int main() {
   exhaustive_small();
   ancestor_contract();
+  const_usability();
+  value_semantics();
+  invariants_after_arbitrary_merges();
+  counter_follows_merges();
+  star_and_full_collapse();
   shapes_that_stress_the_path();
   singletons_and_self_merges();
   exception_paths();
