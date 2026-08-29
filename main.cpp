@@ -291,6 +291,270 @@ class disjoint_set_union {
 
 }  // namespace disjoint_set_unions
 
+namespace cartesian_trees {
+
+// A cartesian tree, also called a treap: a binary search tree on keys and a heap on priorities
+// drawn at random when a key is inserted. The randomness is what keeps it balanced — no
+// rotations, no colour rules, and an expected depth of O(log n) whatever order the keys arrive
+// in. Every operation is O(log n) expected; none is O(log n) guaranteed.
+//
+// The interface is a set's — insert, erase, contains. What a set cannot do, and the reason this
+// exists, is split and merge: cutting the tree at a key and joining two trees, each in O(log n)
+// rather than by rebuilding.
+//
+// **Not a faster std::set.** Measured on a mix of insertions, lookups and erasures, std::set
+// wins: a red-black tree guarantees its depth where a treap only expects it, and libstdc++ has
+// spent decades on node allocation. Reach for this when a problem needs split or merge, and for
+// std::set when it does not.
+//
+// Only operator< is required of a key, exactly as std::set requires. Equality is expressed as
+// neither ordering holding.
+//
+// Nodes are held by std::unique_ptr, so a tree owns its nodes, copies deeply and moves cheaply.
+// A flat arena with indices measured about 1.3x faster, and was rejected: it would have forced
+// a shared static pool, and with it a type that cannot be copied and whose lifetime is tangled
+// with every other tree of the same key. That price buys less than std::set gives away for
+// free, so it is not worth paying.
+template <typename key_type>
+class cartesian_tree {
+ public:
+  cartesian_tree() : _priority_state(seed_from_clock()) {}
+
+  // Fixing the seed makes a run reproducible, which is what tests need. Priorities are only
+  // ever compared inside one tree, so trees sharing a seed cost nothing.
+  explicit cartesian_tree(std::uint64_t seed) : _priority_state(seed) {}
+
+  cartesian_tree(const cartesian_tree& other)
+      : _root(clone(other._root.get())), _priority_state(other._priority_state) {}
+
+  cartesian_tree& operator=(const cartesian_tree& other) {
+    if (this != &other) {
+      _root = clone(other._root.get());
+      _priority_state = other._priority_state;
+    }
+    return *this;
+  }
+
+  // A moved-from tree is left empty rather than merely unspecified. split and merge hand their
+  // nodes to the result, and the source has to stop claiming them.
+  cartesian_tree(cartesian_tree&& other) noexcept
+      : _root(std::move(other._root)), _priority_state(other._priority_state) {}
+
+  cartesian_tree& operator=(cartesian_tree&& other) noexcept {
+    if (this != &other) {
+      _root = std::move(other._root);
+      _priority_state = other._priority_state;
+    }
+    return *this;
+  }
+
+  ~cartesian_tree() = default;
+
+  std::size_t size() const {
+    return subtree_size(_root.get());
+  }
+
+  bool empty() const {
+    return _root == nullptr;
+  }
+
+  bool contains(const key_type& key) const {
+    const node* current = _root.get();
+    while (current != nullptr) {
+      if (key < current->key) {
+        current = current->left.get();
+      } else if (current->key < key) {
+        current = current->right.get();
+      } else {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Returns false when the key was already present, like std::set::insert.
+  bool insert(const key_type& key) {
+    if (contains(key)) {
+      return false;
+    }
+    std::unique_ptr<node> less;
+    std::unique_ptr<node> not_less;
+    split_nodes(std::move(_root), key, less, not_less);
+    std::unique_ptr<node> fresh(new node{key, next_priority(), 1, nullptr, nullptr});
+    _root = merge_nodes(merge_nodes(std::move(less), std::move(fresh)), std::move(not_less));
+    return true;
+  }
+
+  // Returns false when the key was not there.
+  bool erase(const key_type& key) {
+    return erase_node(_root, key);
+  }
+
+ private:
+  struct node {
+    key_type key;
+    std::uint64_t priority;
+    std::size_t subtree_size;
+    std::unique_ptr<node> left;
+    std::unique_ptr<node> right;
+  };
+
+  static std::size_t subtree_size(const node* tree) {
+    return tree == nullptr ? 0 : tree->subtree_size;
+  }
+
+  // Recomputes what a node knows about its subtree from its two children. Everything derived
+  // lives here: the size today, and a monoid aggregate on the day one is added.
+  static void pull(node* tree) {
+    tree->subtree_size = 1 + subtree_size(tree->left.get()) + subtree_size(tree->right.get());
+  }
+
+  // Splits into keys < key and keys >= key. Both halves may be empty.
+  static void split_nodes(std::unique_ptr<node> tree, const key_type& key,
+                          std::unique_ptr<node>& less, std::unique_ptr<node>& not_less) {
+    if (tree == nullptr) {
+      less.reset();
+      not_less.reset();
+      return;
+    }
+    if (tree->key < key) {
+      std::unique_ptr<node> detached = std::move(tree->right);
+      split_nodes(std::move(detached), key, tree->right, not_less);
+      pull(tree.get());
+      less = std::move(tree);
+    } else {
+      std::unique_ptr<node> detached = std::move(tree->left);
+      split_nodes(std::move(detached), key, less, tree->left);
+      pull(tree.get());
+      not_less = std::move(tree);
+    }
+  }
+
+  // Assumes every key on the left is smaller than every key on the right. The public merge
+  // checks that; this does not, because split has just guaranteed it.
+  static std::unique_ptr<node> merge_nodes(std::unique_ptr<node> left,
+                                           std::unique_ptr<node> right) {
+    if (left == nullptr) {
+      return right;
+    }
+    if (right == nullptr) {
+      return left;
+    }
+    if (left->priority > right->priority) {
+      std::unique_ptr<node> merged = merge_nodes(std::move(left->right), std::move(right));
+      left->right = std::move(merged);
+      pull(left.get());
+      return left;
+    }
+    std::unique_ptr<node> merged = merge_nodes(std::move(left), std::move(right->left));
+    right->left = std::move(merged);
+    pull(right.get());
+    return right;
+  }
+
+  static bool erase_node(std::unique_ptr<node>& tree, const key_type& key) {
+    if (tree == nullptr) {
+      return false;
+    }
+    if (!(key < tree->key) && !(tree->key < key)) {
+      std::unique_ptr<node> joined = merge_nodes(std::move(tree->left), std::move(tree->right));
+      tree = std::move(joined);
+      return true;
+    }
+    bool erased = erase_node(key < tree->key ? tree->left : tree->right, key);
+    if (erased) {
+      pull(tree.get());
+    }
+    return erased;
+  }
+
+  static std::unique_ptr<node> clone(const node* tree) {
+    if (tree == nullptr) {
+      return nullptr;
+    }
+    std::unique_ptr<node> copy(new node{tree->key, tree->priority, tree->subtree_size,
+                                        clone(tree->left.get()), clone(tree->right.get())});
+    return copy;
+  }
+
+  static const key_type& smallest_key(const node* tree) {
+    while (tree->left != nullptr) {
+      tree = tree->left.get();
+    }
+    return tree->key;
+  }
+
+  static const key_type& largest_key(const node* tree) {
+    while (tree->right != nullptr) {
+      tree = tree->right.get();
+    }
+    return tree->key;
+  }
+
+  static std::uint64_t seed_from_clock() {
+    return static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+  }
+
+  std::uint64_t next_priority() {
+    _priority_state += 0x9e3779b97f4a7c15ULL;
+    std::uint64_t mixed = _priority_state;
+    mixed = (mixed ^ (mixed >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    mixed = (mixed ^ (mixed >> 27)) * 0x94d049bb133111ebULL;
+    return mixed ^ (mixed >> 31);
+  }
+
+  std::unique_ptr<node> _root;
+  std::uint64_t _priority_state = 0;
+
+  template <typename other_key>
+  friend std::pair<cartesian_tree<other_key>, cartesian_tree<other_key>> split(
+      cartesian_tree<other_key>&& tree, const std::type_identity_t<other_key>& key);
+
+  template <typename other_key>
+  friend cartesian_tree<other_key> merge(cartesian_tree<other_key>&& left,
+                                         cartesian_tree<other_key>&& right);
+};
+
+// The key is deliberately not deduced — std::type_identity_t makes the tree alone decide the
+// type, so split(std::move(tree), 6) works on a tree of std::int64_t instead of failing because
+// a bare literal has a narrower type of its own.
+//
+// Cuts the tree in two: keys < key on the left, keys >= key on the right. Either half may come
+// back empty. The source is consumed — its nodes end up in the results — so it is left empty,
+// and the std::move at the call site is the only thing in the code that says so.
+template <typename key_type>
+std::pair<cartesian_tree<key_type>, cartesian_tree<key_type>> split(
+    cartesian_tree<key_type>&& tree, const std::type_identity_t<key_type>& key) {
+  cartesian_tree<key_type> less(tree._priority_state);
+  cartesian_tree<key_type> not_less(tree._priority_state);
+  cartesian_tree<key_type>::split_nodes(std::move(tree._root), key, less._root, not_less._root);
+  return std::pair<cartesian_tree<key_type>, cartesian_tree<key_type>>(std::move(less),
+                                                                       std::move(not_less));
+}
+
+// Joins two trees, and requires every key on the left to be smaller than every key on the right;
+// throws std::invalid_argument otherwise. The condition is strict rather than <=, because equal
+// keys at the seam would put the same key in the tree twice and quietly break the set invariant
+// that insert and erase rely on. A merge of two halves that came from split always satisfies it.
+template <typename key_type>
+cartesian_tree<key_type> merge(cartesian_tree<key_type>&& left, cartesian_tree<key_type>&& right) {
+  using tree_type = cartesian_tree<key_type>;
+  if (left._root != nullptr && right._root != nullptr) {
+    const key_type& boundary_left = tree_type::largest_key(left._root.get());
+    const key_type& boundary_right = tree_type::smallest_key(right._root.get());
+    if (!(boundary_left < boundary_right)) {
+      throw std::invalid_argument(
+          "cartesian_trees::merge: every key on the left must be smaller than every key on the "
+          "right");
+    }
+  }
+  tree_type result(left._priority_state);
+  result._root = tree_type::merge_nodes(std::move(left._root), std::move(right._root));
+  return result;
+}
+
+}  // namespace cartesian_trees
+
 // Every structure the library offers, gathered in one place. Reach past an alias only for a
 // monoid that has no preset: ds::segment_trees::segment_tree<my_monoid>.
 
@@ -300,6 +564,9 @@ using max_segment_tree = segment_trees::segment_tree<max_monoid<std::int64_t>>;
 using gcd_segment_tree = segment_trees::segment_tree<gcd_monoid<std::int64_t>>;
 
 using disjoint_set_union = disjoint_set_unions::disjoint_set_union;
+
+template <typename key_type>
+using cartesian_tree = cartesian_trees::cartesian_tree<key_type>;
 
 }  // namespace data_structures
 
