@@ -2,13 +2,14 @@
 
 ## Summary
 
-An ordered set of unique keys that can also be cut at a key and joined back, both in O(log n).
+An ordered set of unique keys that can be cut at a key and joined back in O(log n), optionally folding a value per key up the tree with a monoid.
 
 ## Complexity
 
 | Operation | Time |
 | --- | --- |
 | `insert`, `erase`, `contains` | O(log n) expected |
+| `aggregate` | O(1) |
 | `split`, `merge` | O(log n) expected |
 | `size`, `empty` | O(1) |
 | copy | O(n) |
@@ -35,9 +36,12 @@ Measured on 200 000 insertions, 400 000 lookups and 100 000 erasures, best of se
 ```cpp
 namespace algo::data_structures::cartesian_trees {
 
-template <typename key_type>
+template <typename key_type, typename monoid = void>
 class cartesian_tree {
  public:
+  using value_type = /* monoid::value_type, or an empty placeholder without a monoid */;
+  static constexpr bool aggregates = !std::is_void_v<monoid>;
+
   cartesian_tree();                              // priorities seeded from the clock
   explicit cartesian_tree(std::uint64_t seed);   // priorities seeded explicitly
 
@@ -46,20 +50,24 @@ class cartesian_tree {
   cartesian_tree(cartesian_tree&&) noexcept;
   cartesian_tree& operator=(cartesian_tree&&) noexcept;
 
-  bool insert(const key_type& key);              // false if the key was already there
-  bool erase(const key_type& key);               // false if it was not there
+  bool insert(const key_type& key) requires(!aggregates);
+  bool insert(const key_type& key, const value_type& value) requires(aggregates);
+  bool erase(const key_type& key);
   bool contains(const key_type& key) const;
+
+  value_type aggregate() const requires(aggregates);
 
   std::size_t size() const;
   bool empty() const;
 };
 
-template <typename key_type>
-std::pair<cartesian_tree<key_type>, cartesian_tree<key_type>>
-split(cartesian_tree<key_type>&& tree, const key_type& key);
+template <typename key_type, typename monoid>
+std::pair<cartesian_tree<key_type, monoid>, cartesian_tree<key_type, monoid>>
+split(cartesian_tree<key_type, monoid>&& tree, const key_type& key);
 
-template <typename key_type>
-cartesian_tree<key_type> merge(cartesian_tree<key_type>&& left, cartesian_tree<key_type>&& right);
+template <typename key_type, typename monoid>
+cartesian_tree<key_type, monoid> merge(cartesian_tree<key_type, monoid>&& left,
+                                       cartesian_tree<key_type, monoid>&& right);
 
 }  // namespace algo::data_structures::cartesian_trees
 ```
@@ -67,6 +75,39 @@ cartesian_tree<key_type> merge(cartesian_tree<key_type>&& left, cartesian_tree<k
 `split(tree, key)` returns keys `< key` on the left and keys `>= key` on the right. Either half may be empty; an empty tree is an ordinary value and needs no special handling.
 
 `merge(left, right)` requires **every key on the left to be strictly smaller than every key on the right**, and throws `std::invalid_argument` otherwise. Strict, not `<=`: equal keys at the seam would put one key into the tree twice and silently break the uniqueness that `insert` and `erase` rely on. Two halves that came from a `split` always satisfy it.
+
+## Aggregates
+
+The second parameter attaches a value to every key and folds those values up the tree. It takes the same monoids `segment_tree` does — `value_type`, `identity()`, `combine(left, right)` — so a custom one is the same five lines, written on the spot when a round needs something the presets do not cover.
+
+```cpp
+namespace ct = algo::data_structures::cartesian_trees;
+
+ds::cartesian_tree<std::int64_t, ds::sum_monoid<std::int64_t>> tree;
+tree.insert(key, weight);
+
+auto [below, rest] = ct::split(std::move(tree), bound);
+std::int64_t total = below.aggregate();          // sum of every weight with key < bound
+```
+
+A range query is two splits and a read, then two merges to put the tree back:
+
+```cpp
+auto [before, tail] = ct::split(std::move(tree), lower);
+auto [middle, after] = ct::split(std::move(tail), upper);
+
+std::int64_t answer = middle.aggregate();        // fold over [lower, upper)
+
+tree = ct::merge(std::move(before), ct::merge(std::move(middle), std::move(after)));
+```
+
+There is no separate range-query method because there does not need to be one — `split` already produces exactly the subtree in question, and its aggregate is waiting at the root.
+
+Every node holds the fold of its own subtree, and `insert`, `erase`, `split` and `merge` all maintain it. The value belongs to the key: it is written once when the key arrives and never changes, so re-inserting an existing key changes nothing and reports `false`.
+
+Without a monoid the tree is a plain set: `insert` takes a key alone, there is no `aggregate()`, and the node carries no payload at all — the field is marked `[[no_unique_address]]`, so an empty one costs no space.
+
+`aggregates` is a compile-time constant on the class, in case generic code needs to branch on it.
 
 ## Usage
 
@@ -96,7 +137,9 @@ They consume because they must. A split reuses the very same nodes, handing them
 
 **Recursion depth is O(log n) expected**, around 40 levels at n = 2e5, so `split`, `merge` and `erase` recurse safely. Destruction and deep copy recurse to the same depth.
 
-**Room left for aggregates.** Every node recomputes what it knows about its subtree in one place, `pull()`, which today maintains only the subtree size. A monoid aggregate — a sum, a minimum, a count — belongs in that same function, reached through a second template parameter with a default, which is a backwards-compatible addition rather than a change. Nothing of the sort is implemented yet, because nothing needs it yet.
+**One place recomputes a node.** `pull()` rebuilds everything a node knows about its subtree from its two children — the size, and the fold when there is a monoid. Anything else derived from a subtree belongs there and nowhere else.
+
+**The fold follows key order, not tree shape.** `combine` is applied left subtree, then own value, then right subtree, so a non-commutative monoid — string concatenation, matrix products, "last write wins" — gives the answer the keys imply, whatever shape the random priorities happened to produce. A test builds the same tree in scrambled insertion order and checks the fold comes out identical.
 
 **When not to use it.** For a plain set, `std::set` is faster and shorter to type. For prefix sums with point updates, `fenwick` or `segment_tree` are far cheaper. This structure earns its place when keys must be cut apart and rejoined.
 

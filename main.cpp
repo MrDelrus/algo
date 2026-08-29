@@ -293,6 +293,35 @@ class disjoint_set_union {
 
 namespace cartesian_trees {
 
+namespace detail {
+
+// Stands in for the value type when no monoid is supplied, so signatures stay well formed even
+// where the requires clause has already switched them off.
+struct absent {};
+
+template <typename monoid>
+struct aggregate_traits {
+  using value_type = typename monoid::value_type;
+};
+
+template <>
+struct aggregate_traits<void> {
+  using value_type = absent;
+};
+
+// What a node carries beyond its key. Empty when nothing is aggregated, and marked so the
+// compiler is allowed to give it no space at all.
+template <typename monoid>
+struct payload {
+  typename monoid::value_type value;
+  typename monoid::value_type aggregate;
+};
+
+template <>
+struct payload<void> {};
+
+}  // namespace detail
+
 // A cartesian tree, also called a treap: a binary search tree on keys and a heap on priorities
 // drawn at random when a key is inserted. The randomness is what keeps it balanced — no
 // rotations, no colour rules, and an expected depth of O(log n) whatever order the keys arrive
@@ -303,25 +332,41 @@ namespace cartesian_trees {
 // rather than by rebuilding.
 //
 // **Not a faster std::set.** Measured on a mix of insertions, lookups and erasures, std::set
-// wins: a red-black tree guarantees its depth where a treap only expects it, and libstdc++ has
-// spent decades on node allocation. Reach for this when a problem needs split or merge, and for
-// std::set when it does not.
+// wins by about 1.7x: a red-black tree guarantees its depth where a treap only expects it, and
+// libstdc++ has spent decades on node allocation. Reach for this when a problem needs split or
+// merge, and for std::set when it does not.
 //
 // Only operator< is required of a key, exactly as std::set requires. Equality is expressed as
 // neither ordering holding.
 //
+// The second parameter attaches a value to every key and folds those values up the tree. Supply
+// any monoid — the same ones segment_tree takes — and each node keeps the fold of its subtree,
+// maintained by split, merge, insert and erase alike:
+//
+//   ds::cartesian_tree<std::int64_t, ds::sum_monoid<std::int64_t>> tree;
+//   tree.insert(key, weight);
+//   auto [smaller, rest] = ct::split(std::move(tree), bound);
+//   std::int64_t total = smaller.aggregate();     // sum of every weight below bound
+//
+// Splitting out a range and reading its aggregate is how a range query is spelled here; there
+// is no separate query method because there does not need to be one.
+//
 // Nodes are held by std::unique_ptr, so a tree owns its nodes, copies deeply and moves cheaply.
-// A flat arena with indices measured about 1.3x faster, and was rejected: it would have forced
-// a shared static pool, and with it a type that cannot be copied and whose lifetime is tangled
-// with every other tree of the same key. That price buys less than std::set gives away for
-// free, so it is not worth paying.
-template <typename key_type>
+// A flat arena with indices measured about 1.3x faster and was rejected: it would have forced a
+// shared static pool, and with it a type that cannot be copied and whose lifetime is tangled
+// with every other tree of the same key.
+template <typename key_type, typename monoid = void>
 class cartesian_tree {
  public:
+  // absent when no monoid was supplied, so the name always exists and never gets in the way.
+  using value_type = typename detail::aggregate_traits<monoid>::value_type;
+
+  static constexpr bool aggregates = !std::is_void_v<monoid>;
+
   cartesian_tree() : _priority_state(seed_from_clock()) {}
 
-  // Fixing the seed makes a run reproducible, which is what tests need. Priorities are only
-  // ever compared inside one tree, so trees sharing a seed cost nothing.
+  // Fixing the seed makes a run reproducible, which is what tests need. Priorities are only ever
+  // compared inside one tree, so trees sharing a seed cost nothing.
   explicit cartesian_tree(std::uint64_t seed) : _priority_state(seed) {}
 
   cartesian_tree(const cartesian_tree& other)
@@ -373,16 +418,18 @@ class cartesian_tree {
   }
 
   // Returns false when the key was already present, like std::set::insert.
-  bool insert(const key_type& key) {
-    if (contains(key)) {
-      return false;
-    }
-    std::unique_ptr<node> less;
-    std::unique_ptr<node> not_less;
-    split_nodes(std::move(_root), key, less, not_less);
-    std::unique_ptr<node> fresh(new node{key, next_priority(), 1, nullptr, nullptr});
-    _root = merge_nodes(merge_nodes(std::move(less), std::move(fresh)), std::move(not_less));
-    return true;
+  bool insert(const key_type& key)
+    requires(!aggregates)
+  {
+    return insert_node(key, detail::absent{});
+  }
+
+  // The value is written once, when the key arrives, and never changes afterwards. Re-inserting
+  // a key that is already there changes nothing and reports false.
+  bool insert(const key_type& key, const value_type& value)
+    requires(aggregates)
+  {
+    return insert_node(key, value);
   }
 
   // Returns false when the key was not there.
@@ -390,11 +437,19 @@ class cartesian_tree {
     return erase_node(_root, key);
   }
 
+  // The fold of every value in the tree, or the monoid's identity when it is empty.
+  value_type aggregate() const
+    requires(aggregates)
+  {
+    return aggregate_of(_root.get());
+  }
+
  private:
   struct node {
     key_type key;
     std::uint64_t priority;
     std::size_t subtree_size;
+    [[no_unique_address]] detail::payload<monoid> carried;
     std::unique_ptr<node> left;
     std::unique_ptr<node> right;
   };
@@ -403,10 +458,44 @@ class cartesian_tree {
     return tree == nullptr ? 0 : tree->subtree_size;
   }
 
-  // Recomputes what a node knows about its subtree from its two children. Everything derived
-  // lives here: the size today, and a monoid aggregate on the day one is added.
+  static value_type aggregate_of(const node* tree)
+    requires(aggregates)
+  {
+    return tree == nullptr ? monoid::identity() : tree->carried.aggregate;
+  }
+
+  // Recomputes everything a node knows about its subtree from its two children: the size, and
+  // the fold when there is one. This is the only place either is written.
   static void pull(node* tree) {
     tree->subtree_size = 1 + subtree_size(tree->left.get()) + subtree_size(tree->right.get());
+    if constexpr (aggregates) {
+      value_type folded = monoid::combine(aggregate_of(tree->left.get()), tree->carried.value);
+      tree->carried.aggregate = monoid::combine(folded, aggregate_of(tree->right.get()));
+    }
+  }
+
+  static std::unique_ptr<node> make_node(const key_type& key, std::uint64_t priority,
+                                         const value_type& value) {
+    std::unique_ptr<node> fresh(new node{key, priority, 1, {}, nullptr, nullptr});
+    if constexpr (aggregates) {
+      fresh->carried.value = value;
+      fresh->carried.aggregate = value;
+    } else {
+      static_cast<void>(value);
+    }
+    return fresh;
+  }
+
+  bool insert_node(const key_type& key, const value_type& value) {
+    if (contains(key)) {
+      return false;
+    }
+    std::unique_ptr<node> less;
+    std::unique_ptr<node> not_less;
+    split_nodes(std::move(_root), key, less, not_less);
+    std::unique_ptr<node> fresh = make_node(key, next_priority(), value);
+    _root = merge_nodes(merge_nodes(std::move(less), std::move(fresh)), std::move(not_less));
+    return true;
   }
 
   // Splits into keys < key and keys >= key. Both halves may be empty.
@@ -473,7 +562,8 @@ class cartesian_tree {
       return nullptr;
     }
     std::unique_ptr<node> copy(new node{tree->key, tree->priority, tree->subtree_size,
-                                        clone(tree->left.get()), clone(tree->right.get())});
+                                        tree->carried, clone(tree->left.get()),
+                                        clone(tree->right.get())});
     return copy;
   }
 
@@ -506,13 +596,14 @@ class cartesian_tree {
   std::unique_ptr<node> _root;
   std::uint64_t _priority_state = 0;
 
-  template <typename other_key>
-  friend std::pair<cartesian_tree<other_key>, cartesian_tree<other_key>> split(
-      cartesian_tree<other_key>&& tree, const std::type_identity_t<other_key>& key);
+  template <typename other_key, typename other_monoid>
+  friend std::pair<cartesian_tree<other_key, other_monoid>, cartesian_tree<other_key, other_monoid>>
+  split(cartesian_tree<other_key, other_monoid>&& tree, const std::type_identity_t<other_key>& key);
 
-  template <typename other_key>
-  friend cartesian_tree<other_key> merge(cartesian_tree<other_key>&& left,
-                                         cartesian_tree<other_key>&& right);
+  template <typename other_key, typename other_monoid>
+  friend cartesian_tree<other_key, other_monoid> merge(
+      cartesian_tree<other_key, other_monoid>&& left,
+      cartesian_tree<other_key, other_monoid>&& right);
 };
 
 // The key is deliberately not deduced — std::type_identity_t makes the tree alone decide the
@@ -522,23 +613,24 @@ class cartesian_tree {
 // Cuts the tree in two: keys < key on the left, keys >= key on the right. Either half may come
 // back empty. The source is consumed — its nodes end up in the results — so it is left empty,
 // and the std::move at the call site is the only thing in the code that says so.
-template <typename key_type>
-std::pair<cartesian_tree<key_type>, cartesian_tree<key_type>> split(
-    cartesian_tree<key_type>&& tree, const std::type_identity_t<key_type>& key) {
-  cartesian_tree<key_type> less(tree._priority_state);
-  cartesian_tree<key_type> not_less(tree._priority_state);
-  cartesian_tree<key_type>::split_nodes(std::move(tree._root), key, less._root, not_less._root);
-  return std::pair<cartesian_tree<key_type>, cartesian_tree<key_type>>(std::move(less),
-                                                                       std::move(not_less));
+template <typename key_type, typename monoid>
+std::pair<cartesian_tree<key_type, monoid>, cartesian_tree<key_type, monoid>> split(
+    cartesian_tree<key_type, monoid>&& tree, const std::type_identity_t<key_type>& key) {
+  using tree_type = cartesian_tree<key_type, monoid>;
+  tree_type less(tree._priority_state);
+  tree_type not_less(tree._priority_state);
+  tree_type::split_nodes(std::move(tree._root), key, less._root, not_less._root);
+  return std::pair<tree_type, tree_type>(std::move(less), std::move(not_less));
 }
 
 // Joins two trees, and requires every key on the left to be smaller than every key on the right;
 // throws std::invalid_argument otherwise. The condition is strict rather than <=, because equal
 // keys at the seam would put the same key in the tree twice and quietly break the set invariant
 // that insert and erase rely on. A merge of two halves that came from split always satisfies it.
-template <typename key_type>
-cartesian_tree<key_type> merge(cartesian_tree<key_type>&& left, cartesian_tree<key_type>&& right) {
-  using tree_type = cartesian_tree<key_type>;
+template <typename key_type, typename monoid>
+cartesian_tree<key_type, monoid> merge(cartesian_tree<key_type, monoid>&& left,
+                                       cartesian_tree<key_type, monoid>&& right) {
+  using tree_type = cartesian_tree<key_type, monoid>;
   if (left._root != nullptr && right._root != nullptr) {
     const key_type& boundary_left = tree_type::largest_key(left._root.get());
     const key_type& boundary_right = tree_type::smallest_key(right._root.get());
@@ -565,8 +657,8 @@ using gcd_segment_tree = segment_trees::segment_tree<gcd_monoid<std::int64_t>>;
 
 using disjoint_set_union = disjoint_set_unions::disjoint_set_union;
 
-template <typename key_type>
-using cartesian_tree = cartesian_trees::cartesian_tree<key_type>;
+template <typename key_type, typename monoid = void>
+using cartesian_tree = cartesian_trees::cartesian_tree<key_type, monoid>;
 
 }  // namespace data_structures
 

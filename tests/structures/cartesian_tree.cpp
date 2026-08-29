@@ -14,6 +14,7 @@
 #include "../harness.hpp"
 
 #include <cstdint>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -54,6 +55,189 @@ void check_membership(const ds::cartesian_tree<std::int64_t>& tree,
     check_equal(tree.contains(key), reference.count(key) != 0,
                 note + ": contains " + std::to_string(key));
   }
+}
+
+// The aggregate is defined by the values in the subtree, so the reference is a std::map of key
+// to value folded by hand. Slow and obviously right.
+template <typename monoid>
+typename monoid::value_type fold(const std::map<std::int64_t, typename monoid::value_type>& values,
+                                 std::int64_t lower, std::int64_t upper) {
+  typename monoid::value_type folded = monoid::identity();
+  for (const auto& entry : values) {
+    if (!(entry.first < lower) && entry.first < upper) {
+      folded = monoid::combine(folded, entry.second);
+    }
+  }
+  return folded;
+}
+
+constexpr std::int64_t no_bound_low = -1000000;
+constexpr std::int64_t no_bound_high = 1000000;
+
+void aggregates_follow_every_operation() {
+  testing::section("aggregates follow every operation");
+  testing::random_source source(seed ^ 0x5555555555555555ULL);
+  using monoid = ds::sum_monoid<std::int64_t>;
+
+  const std::int64_t domain = 30;
+  ds::cartesian_tree<std::int64_t, monoid> tree(seed);
+  std::map<std::int64_t, std::int64_t> reference;
+
+  check_equal(tree.aggregate(), std::int64_t(0), "an empty tree folds to the identity");
+
+  for (std::size_t round = 0; round < 600; ++round) {
+    std::int64_t key = static_cast<std::int64_t>(source.below(static_cast<std::size_t>(domain)));
+    if (source.next() % 3 == 0) {
+      bool erased = tree.erase(key);
+      check_equal(erased, reference.erase(key) != 0, "erase agrees with the reference");
+    } else {
+      std::int64_t value = static_cast<std::int64_t>(source.below(1000)) - 500;
+      bool inserted = tree.insert(key, value);
+      check_equal(inserted, reference.emplace(key, value).second, "insert agrees");
+    }
+    check_equal(tree.size(), reference.size(), "size agrees");
+    check_equal(tree.aggregate(), fold<monoid>(reference, no_bound_low, no_bound_high),
+                "the fold of the whole tree agrees, round " + std::to_string(round));
+  }
+}
+
+// Splitting out a range and reading its aggregate is how a range query is spelled, so that is
+// what gets checked — at every cut, against the folded reference.
+void split_carries_the_aggregate() {
+  testing::section("split carries the aggregate");
+  testing::random_source source(seed ^ 0x6666666666666666ULL);
+  using monoid = ds::sum_monoid<std::int64_t>;
+
+  const std::int64_t domain = 24;
+  std::map<std::int64_t, std::int64_t> reference;
+  for (std::size_t round = 0; round < 18; ++round) {
+    std::int64_t key = static_cast<std::int64_t>(source.below(static_cast<std::size_t>(domain)));
+    reference.emplace(key, static_cast<std::int64_t>(source.below(200)) - 100);
+  }
+
+  for (std::int64_t cut = -2; cut <= domain + 1; ++cut) {
+    ds::cartesian_tree<std::int64_t, monoid> tree(seed + static_cast<std::uint64_t>(cut));
+    for (const auto& entry : reference) {
+      tree.insert(entry.first, entry.second);
+    }
+
+    auto halves = ct::split(std::move(tree), cut);
+    check_equal(halves.first.aggregate(), fold<monoid>(reference, no_bound_low, cut),
+                "the left half folds its own keys, cut=" + std::to_string(cut));
+    check_equal(halves.second.aggregate(), fold<monoid>(reference, cut, no_bound_high),
+                "the right half folds the rest, cut=" + std::to_string(cut));
+
+    auto rebuilt = ct::merge(std::move(halves.first), std::move(halves.second));
+    check_equal(rebuilt.aggregate(), fold<monoid>(reference, no_bound_low, no_bound_high),
+                "and merging restores the whole fold, cut=" + std::to_string(cut));
+  }
+}
+
+// A range query built from two splits, which is the pattern a problem would actually use.
+void range_queries_through_split() {
+  testing::section("range queries through split");
+  testing::random_source source(seed ^ 0x7777777777777777ULL);
+  using monoid = ds::min_monoid<std::int64_t>;
+
+  const std::int64_t domain = 20;
+  std::map<std::int64_t, std::int64_t> reference;
+  for (std::int64_t key = 0; key < domain; ++key) {
+    reference.emplace(key, static_cast<std::int64_t>(source.below(500)));
+  }
+
+  for (std::int64_t lower = 0; lower <= domain; ++lower) {
+    for (std::int64_t upper = lower; upper <= domain; ++upper) {
+      ds::cartesian_tree<std::int64_t, monoid> tree(seed);
+      for (const auto& entry : reference) {
+        tree.insert(entry.first, entry.second);
+      }
+
+      auto first_cut = ct::split(std::move(tree), lower);
+      auto second_cut = ct::split(std::move(first_cut.second), upper);
+      check_equal(second_cut.first.aggregate(), fold<monoid>(reference, lower, upper),
+                  "minimum over [" + std::to_string(lower) + ", " + std::to_string(upper) + ")");
+
+      auto tail = ct::merge(std::move(second_cut.first), std::move(second_cut.second));
+      auto whole = ct::merge(std::move(first_cut.first), std::move(tail));
+      check_equal(whole.size(), reference.size(), "and the tree survives being taken apart");
+    }
+  }
+}
+
+void aggregates_survive_copying() {
+  testing::section("aggregates survive copying");
+  using monoid = ds::sum_monoid<std::int64_t>;
+
+  ds::cartesian_tree<std::int64_t, monoid> original(seed);
+  for (std::int64_t key = 0; key < 20; ++key) {
+    original.insert(key, key + 1);
+  }
+  const std::int64_t total = 20 * 21 / 2;
+  check_equal(original.aggregate(), total, "the fold of one to twenty");
+
+  ds::cartesian_tree<std::int64_t, monoid> copy = original;
+  check_equal(copy.aggregate(), total, "a copy folds the same");
+  copy.erase(19);
+  check_equal(copy.aggregate(), total - 20, "the copy's fold follows its own erase");
+  check_equal(original.aggregate(), total, "and the original's does not move");
+
+  ds::cartesian_tree<std::int64_t, monoid> moved = std::move(copy);
+  check_equal(moved.aggregate(), total - 20, "a move carries the fold across");
+  check_equal(copy.aggregate(), std::int64_t(0), "and leaves the identity behind");
+}
+
+// A monoid whose combine is not commutative, to prove the fold is assembled left to right rather
+// than in whatever order the tree happens to hold the nodes.
+struct concat_monoid {
+  using value_type = std::string;
+  static value_type identity() {
+    return std::string();
+  }
+  static value_type combine(const value_type& left, const value_type& right) {
+    return left + right;
+  }
+};
+
+void the_fold_respects_key_order() {
+  testing::section("the fold respects key order");
+
+  ds::cartesian_tree<std::int64_t, concat_monoid> tree(seed);
+  const std::string letters = "abcdefghijklmnopqrst";
+  for (std::size_t index = 0; index < letters.size(); ++index) {
+    tree.insert(static_cast<std::int64_t>(index), std::string(1, letters[index]));
+  }
+  check_equal(tree.aggregate(), letters, "the whole tree folds into key order");
+
+  // Inserting in a scrambled order must give the same answer: the fold follows the keys, not the
+  // arrival order or the shape the priorities happened to produce.
+  ds::cartesian_tree<std::int64_t, concat_monoid> scrambled(seed ^ 0x99ULL);
+  const std::vector<std::size_t> order = {7, 3,  19, 0,  11, 5,  1,  17, 9,  14,
+                                          2, 12, 6,  18, 4,  10, 15, 8,  13, 16};
+  for (std::size_t index : order) {
+    scrambled.insert(static_cast<std::int64_t>(index), std::string(1, letters[index]));
+  }
+  check_equal(scrambled.aggregate(), letters, "and does not depend on insertion order");
+
+  auto halves = ct::split(std::move(scrambled), 7);
+  check_equal(halves.first.aggregate(), letters.substr(0, 7), "a split half folds its own prefix");
+  check_equal(halves.second.aggregate(), letters.substr(7), "and the other its own suffix");
+}
+
+// The plain tree must be untouched by the aggregate machinery: no value argument, and no space
+// spent on a payload that does not exist.
+void a_tree_without_a_monoid_is_unchanged() {
+  testing::section("a tree without a monoid is unchanged");
+
+  ds::cartesian_tree<std::int64_t> plain(seed);
+  check(plain.insert(5), "insert still takes a key alone");
+  check(!plain.insert(5), "and still reports duplicates");
+  check(plain.contains(5), "and still finds it");
+  check_equal(plain.size(), std::size_t(1), "and still counts");
+
+  static_assert(!ds::cartesian_tree<std::int64_t>::aggregates,
+                "a tree without a monoid must not claim to aggregate");
+  static_assert(ds::cartesian_tree<std::int64_t, ds::sum_monoid<std::int64_t>>::aggregates,
+                "a tree with one must");
 }
 
 void against_std_set() {
@@ -447,6 +631,12 @@ void large_against_std_set() {
 
 int main() {
   against_std_set();
+  aggregates_follow_every_operation();
+  split_carries_the_aggregate();
+  range_queries_through_split();
+  aggregates_survive_copying();
+  the_fold_respects_key_order();
+  a_tree_without_a_monoid_is_unchanged();
   split_places_every_key();
   merge_rebuilds_what_split_took_apart();
   merge_guards_its_precondition();
