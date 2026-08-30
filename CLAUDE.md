@@ -71,9 +71,11 @@ Sections: **Summary**, **Implementation**, the API as tables of operations, **Tr
 
 ### Comments in main.cpp
 
-Space there is scarce, and the file is read while solving. Comments describe **use, not internals**: what a method does, what it takes and returns, and its complexity — stated as amortised where that is the case. Heuristics, storage layout and reasoning are documented on the component's page instead, never here.
+`main.cpp` is submitted whole, and Codeforces accepts at most 65 000 characters. The library keeps to 50 000, so space there is budgeted rather than spent freely.
 
-A component gets a header comment of two or three lines: what it is, the conventions it obeys, what it throws.
+A comment on a method states three things and stops: what it does, the conventions on what it takes and returns, and its complexity — marked amortised where that applies. Heuristics, storage layout and reasoning belong on the component's documentation page and are not repeated here.
+
+A component gets a header comment of two lines: what it is, the conventions it obeys, what it throws.
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 

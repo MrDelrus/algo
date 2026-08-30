@@ -18,8 +18,8 @@ namespace algo {
 
 namespace data_structures {
 
-// A monoid: an associative combine and a two-sided identity. Commutativity is not required —
-// every structure that folds a range keeps operand order.
+// A monoid: associative combine, two-sided identity. Folds keep operand order, so combine need
+// not be commutative.
 
 template <typename value>
 struct sum_monoid {
@@ -134,7 +134,7 @@ class segment_tree {
     return monoid::combine(from_left, from_right);
   }
 
-  // Fold of everything; equals query(0, n). O(1).
+  // Fold of everything, equal to query(0, n). O(1).
   value_type query_all() const {
     return _tree.empty() ? monoid::identity() : _tree[1];
   }
@@ -186,7 +186,7 @@ class segment_tree {
 namespace disjoint_set_unions {
 
 // A partition of 0 .. n - 1 under merging. Vertices 0-indexed.
-// Queries are const. Throws std::out_of_range outside the structure.
+// Throws std::out_of_range outside the structure.
 class disjoint_set_union {
  public:
   disjoint_set_union() = default;
@@ -199,15 +199,14 @@ class disjoint_set_union {
     }
   }
 
-  // The component's representative; unspecified which vertex, and it changes as merges happen.
+  // The component's representative. Which vertex is unspecified and changes on merges.
   // O(alpha(n)) amortised.
   std::size_t get_ancestor(std::size_t vertex) const {
     check_vertex(vertex, "disjoint_set_union::get_ancestor");
     return find_root(vertex);
   }
 
-  // Joins the two components. Returns false when they already shared one.
-  // O(alpha(n)) amortised.
+  // Joins two components; false when they already shared one. O(alpha(n)) amortised.
   bool merge(std::size_t first, std::size_t second) {
     check_vertex(first, "disjoint_set_union::merge");
     check_vertex(second, "disjoint_set_union::merge");
@@ -227,14 +226,14 @@ class disjoint_set_union {
     return true;
   }
 
-  // O(alpha(n)) amortised.
+  // Whether the two vertices share a component. O(alpha(n)) amortised.
   bool is_connected(std::size_t first, std::size_t second) const {
     check_vertex(first, "disjoint_set_union::is_connected");
     check_vertex(second, "disjoint_set_union::is_connected");
     return find_root(first) == find_root(second);
   }
 
-  // Vertices in this vertex's component. O(alpha(n)) amortised.
+  // Size of this vertex's component. O(alpha(n)) amortised.
   std::size_t get_component_size(std::size_t vertex) const {
     check_vertex(vertex, "disjoint_set_union::get_component_size");
     return _component_size[find_root(vertex)];
