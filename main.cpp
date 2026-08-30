@@ -67,8 +67,8 @@ struct gcd_monoid {
 
 namespace segment_trees {
 
-// Point assignment, range fold over a monoid. Positions 0-indexed, ranges half-open.
-// Throws std::out_of_range on a position or range outside the tree.
+// Point assignment, range fold over a monoid.
+// Positions 0-indexed, ranges half-open. Throws std::out_of_range outside the tree.
 template <typename monoid>
 class segment_tree {
  public:
@@ -76,9 +76,11 @@ class segment_tree {
 
   segment_tree() = default;
 
+  // size elements, each identity(). O(n).
   explicit segment_tree(std::size_t size)
       : _size(size), _leaves(leaf_count(size)), _tree(2 * _leaves, monoid::identity()) {}
 
+  // O(n).
   explicit segment_tree(const std::vector<value_type>& values)
       : _size(values.size()),
         _leaves(leaf_count(values.size())),
@@ -91,11 +93,13 @@ class segment_tree {
     }
   }
 
+  // The element at position. O(1).
   value_type get(std::size_t position) const {
     check_position(position, "segment_tree::get");
     return _tree[_leaves + position];
   }
 
+  // Assigns value, ignoring what was there. O(log n).
   void set(std::size_t position, const value_type& value) {
     check_position(position, "segment_tree::set");
     std::size_t node = _leaves + position;
@@ -103,7 +107,7 @@ class segment_tree {
     pull_up(node);
   }
 
-  // a[position] = combine(a[position], value)
+  // a[position] = combine(a[position], value). O(log n).
   void combine_at(std::size_t position, const value_type& value) {
     check_position(position, "segment_tree::combine_at");
     std::size_t node = _leaves + position;
@@ -111,7 +115,7 @@ class segment_tree {
     pull_up(node);
   }
 
-  // Fold of [left, right). Returns identity() when left == right.
+  // Fold of [left, right); identity() when left == right. O(log n).
   value_type query(std::size_t left, std::size_t right) const {
     check_range(left, right, "segment_tree::query");
     value_type from_left = monoid::identity();
@@ -130,6 +134,7 @@ class segment_tree {
     return monoid::combine(from_left, from_right);
   }
 
+  // Fold of everything; equals query(0, n). O(1).
   value_type query_all() const {
     return _tree.empty() ? monoid::identity() : _tree[1];
   }
@@ -139,7 +144,6 @@ class segment_tree {
     return std::bit_ceil(size == 0 ? std::size_t(1) : size);
   }
 
-  // The message is built only on the failing path, so a satisfied check is one branch.
   [[noreturn]] static void reject_position(const char* where, std::size_t position,
                                            std::size_t size) {
     throw std::out_of_range(std::string(where) + ": position " + std::to_string(position) +
@@ -181,13 +185,13 @@ class segment_tree {
 
 namespace disjoint_set_unions {
 
-// Disjoint set union with union by size and full path compression. Vertices 0-indexed.
-// Queries are const and still compress, so the storage is mutable.
-// Throws std::out_of_range on a vertex outside the structure.
+// A partition of 0 .. n - 1 under merging. Vertices 0-indexed.
+// Queries are const. Throws std::out_of_range outside the structure.
 class disjoint_set_union {
  public:
   disjoint_set_union() = default;
 
+  // size vertices, each alone. O(n).
   explicit disjoint_set_union(std::size_t size)
       : _parent(size), _component_size(size, 1), _component_count(size) {
     for (std::size_t vertex = 0; vertex < size; ++vertex) {
@@ -195,12 +199,15 @@ class disjoint_set_union {
     }
   }
 
+  // The component's representative; unspecified which vertex, and it changes as merges happen.
+  // O(alpha(n)) amortised.
   std::size_t get_ancestor(std::size_t vertex) const {
     check_vertex(vertex, "disjoint_set_union::get_ancestor");
     return find_root(vertex);
   }
 
-  // Returns false when the vertices already shared a component — Kruskal's cycle test.
+  // Joins the two components. Returns false when they already shared one.
+  // O(alpha(n)) amortised.
   bool merge(std::size_t first, std::size_t second) {
     check_vertex(first, "disjoint_set_union::merge");
     check_vertex(second, "disjoint_set_union::merge");
@@ -220,23 +227,25 @@ class disjoint_set_union {
     return true;
   }
 
+  // O(alpha(n)) amortised.
   bool is_connected(std::size_t first, std::size_t second) const {
     check_vertex(first, "disjoint_set_union::is_connected");
     check_vertex(second, "disjoint_set_union::is_connected");
     return find_root(first) == find_root(second);
   }
 
+  // Vertices in this vertex's component. O(alpha(n)) amortised.
   std::size_t get_component_size(std::size_t vertex) const {
     check_vertex(vertex, "disjoint_set_union::get_component_size");
     return _component_size[find_root(vertex)];
   }
 
+  // Components remaining. O(1).
   std::size_t get_component_count() const {
     return _component_count;
   }
 
  private:
-  // Two passes, no recursion: find the root, then reattach the whole path to it.
   std::size_t find_root(std::size_t vertex) const {
     std::size_t root = vertex;
     while (_parent[root] != root) {

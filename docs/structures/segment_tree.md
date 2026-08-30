@@ -7,6 +7,19 @@ ds::segment_tree_sum tree(values);          // also _min, _max, _gcd, over std::
 ds::segment_trees::segment_tree<my_monoid> custom(values);
 ```
 
+## Implementation
+
+Iterative, bottom-up, over a flat `std::vector`. The leaf count is rounded up to a power of two, so memory is `2 * ceil_pow2(n)` values and padding leaves hold `identity()` — which is why `query(0, n)` and `query_all()` agree.
+
+Ancestors are recomputed from their two children after a leaf changes, never patched in place. `combine_at` therefore requires no inverse and works for `min`, `max` and `gcd`.
+
+| | |
+| --- | --- |
+| build | O(n) |
+| `get`, `query_all` | O(1) |
+| `set`, `combine_at`, `query` | O(log n) |
+| memory | `2 * ceil_pow2(n)` values |
+
 ## Constructors
 
 | | |
@@ -53,7 +66,7 @@ Provided: `sum_monoid`, `min_monoid`, `max_monoid`, `gcd_monoid`, with identitie
 ## Traps
 
 - `sum_monoid<std::int64_t>` wraps silently on overflow.
-- `combine_at` needs no inverse, so it works for `min`, `max` and `gcd`.
+- `query(4, 2)` throws; `query(5, 5)` on a tree of five is legal and returns `identity()`.
 
 ## Related
 

@@ -63,13 +63,17 @@ Paragraphs are single lines. Never hard-wrap prose at a column — let the edito
 
 Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named exactly after the component — `segment_tree.md`, matching the type it documents.
 
-A page documents the API, for a reader who already knows the structure. It states what each operation does, the conventions it obeys (index base, half-open ranges, the meaning of a boolean return), what it throws, and the misuses that compile but misbehave.
+Readers are assumed to know the data structures. A page describes **this implementation**: which variant and heuristics were used, the complexity of each operation, the memory it holds, what each operation does, the conventions it obeys (index base, half-open ranges, the meaning of a boolean return), what it throws, and the misuses that compile but misbehave.
 
-It does not contain complexity tables, descriptions of the algorithm, or design rationale. Rationale belongs in the pull request that established it.
+A page does not explain how the structure works in general, and does not argue for the design. Rationale belongs in the pull request that established it.
 
-Sections: **Summary**, the API as tables of operations, **Traps**, **Related**. Expected length is forty to sixty lines.
+Sections: **Summary**, **Implementation**, the API as tables of operations, **Traps**, **Related**.
 
-Comments in `main.cpp` follow the same rule: two or three lines per component stating what it does, the conventions it obeys, and what it throws.
+### Comments in main.cpp
+
+Space there is scarce, and the file is read while solving. Comments describe **use, not internals**: what a method does, what it takes and returns, and its complexity — stated as amortised where that is the case. Heuristics, storage layout and reasoning are documented on the component's page instead, never here.
+
+A component gets a header comment of two or three lines: what it is, the conventions it obeys, what it throws.
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 

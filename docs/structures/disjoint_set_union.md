@@ -6,6 +6,21 @@ A partition of `0 .. n - 1` under merging.
 ds::disjoint_set_union structure(n);
 ```
 
+## Implementation
+
+Union by size with full path compression, over two flat `std::vector`s of `std::size_t`: parents and component sizes, plus a component counter maintained on each successful merge.
+
+`get_ancestor` finds the root in one pass and reattaches the whole path to it in a second, iteratively. It is `const`: the parent array is `mutable`, since compression changes how the partition is stored rather than which partition it is.
+
+Union by size rather than by rank. The bound is the same, and the size is directly useful as `get_component_size`.
+
+| | |
+| --- | --- |
+| build | O(n) |
+| `get_component_count` | O(1) |
+| everything else | O(α(n)) amortised |
+| memory | 2n values |
+
 ## Operations
 
 Vertices are **0-indexed**.
