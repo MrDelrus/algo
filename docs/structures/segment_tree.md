@@ -40,7 +40,7 @@ Positions are **0-indexed**, ranges are **half-open** `[left, right)`.
 | `query(left, right)` | Fold of `[left, right)`. Returns `identity()` when `left == right`. |
 | `query_all()` | Fold of everything. Same answer as `query(0, n)`. |
 
-Everything throws `std::out_of_range` for a position at or past `n`, a range reaching past `n`, or a reversed range. `query(5, 5)` on a tree of five is legal; `query(4, 2)` is not.
+A position at or past `n`, a range reaching past `n`, or a reversed range are **undefined behaviour** — nothing is checked, as in `std::vector::operator[]`. `query(5, 5)` on a tree of five is legal and returns `identity()`.
 
 There is no `size()`. The size is fixed at construction.
 
@@ -66,7 +66,7 @@ Provided: `sum_monoid`, `min_monoid`, `max_monoid`, `gcd_monoid`, with identitie
 ## Traps
 
 - `sum_monoid<std::int64_t>` wraps silently on overflow.
-- `query(4, 2)` throws; `query(5, 5)` on a tree of five is legal and returns `identity()`.
+- **An out-of-range position is not diagnosed and often not even a crash.** The leaf array is padded to a power of two, so reading past `n` usually lands in padding and returns `identity()`; sanitizers see nothing. A wrong answer is the symptom.
 
 ## Related
 

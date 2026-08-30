@@ -22,9 +22,7 @@
 namespace {
 
 using testing::check;
-using testing::check_does_not_throw;
 using testing::check_equal;
-using testing::check_throws;
 
 constexpr std::size_t exhaustive_limit = 32;
 constexpr std::uint64_t seed = 0x517cc1b727220a95ULL;
@@ -434,50 +432,6 @@ void star_and_full_collapse() {
   check_equal(inert.get_component_count(), std::size_t(100), "and leaves every vertex alone");
 }
 
-void exception_paths() {
-  testing::section("exception paths");
-
-  ds::disjoint_set_union structure(5);
-
-  check_throws<std::out_of_range>([&] { return structure.get_ancestor(5); }, "ancestor at n");
-  check_throws<std::out_of_range>([&] { return structure.get_ancestor(~std::size_t(0)); },
-                                  "ancestor of a wrapped-around index");
-  check_throws<std::out_of_range>([&] { return structure.merge(5, 0); },
-                                  "merge with a left vertex at n");
-  check_throws<std::out_of_range>([&] { return structure.merge(0, 5); },
-                                  "merge with a right vertex at n");
-  check_throws<std::out_of_range>([&] { return structure.is_connected(5, 0); },
-                                  "is_connected at n");
-  check_throws<std::out_of_range>([&] { return structure.is_connected(0, 5); },
-                                  "is_connected at n on the right");
-  check_throws<std::out_of_range>([&] { return structure.get_component_size(5); }, "size at n");
-
-  ds::disjoint_set_union empty_structure;
-  check_throws<std::out_of_range>([&] { return empty_structure.get_ancestor(0); },
-                                  "ancestor on a default constructed structure");
-  check_throws<std::out_of_range>([&] { return empty_structure.merge(0, 0); },
-                                  "merging on a default constructed structure");
-  check_throws<std::out_of_range>([&] { return empty_structure.is_connected(0, 0); },
-                                  "is_connected on a default constructed structure");
-  check_equal(empty_structure.get_component_count(), std::size_t(0),
-              "a default constructed structure has no components");
-
-  // The boundaries that must be accepted.
-  check_does_not_throw([&] { return structure.get_ancestor(4); }, "the last valid vertex");
-  check_does_not_throw([&] { return structure.merge(4, 0); }, "merging the last valid vertex");
-  check_does_not_throw([&] { return structure.get_component_size(4); }, "size of the last vertex");
-
-  // A rejected call must leave the structure alone.
-  ds::disjoint_set_union guarded(3);
-  guarded.merge(0, 1);
-  try {
-    guarded.merge(0, 3);
-  } catch (const std::out_of_range&) {
-  }
-  check_equal(guarded.get_component_count(), std::size_t(2), "a rejected merge changes nothing");
-  check(guarded.is_connected(0, 1), "and leaves the earlier merge intact");
-}
-
 // Sizes near 1e3 against the same quadratic reference, which makes this section O(n^2).
 void large_against_quadratic() {
   testing::section("large, checked against the quadratic reference");
@@ -525,7 +479,6 @@ int main() {
   star_and_full_collapse();
   shapes_that_stress_the_path();
   singletons_and_self_merges();
-  exception_paths();
   large_against_quadratic();
 
   return testing::summarize("disjoint_set_union") == 0 ? 0 : 1;

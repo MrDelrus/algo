@@ -29,7 +29,6 @@ Tests include the library through the header `scripts/extract_library.sh` genera
 - **Be exhaustive where it is cheap.** For `n <= 32`: every size, every range, every position, every starting point. Most bugs are off-by-one, and an off-by-one has nowhere to hide in an exhaustive sweep.
 - **Hit the shape boundaries.** Sizes at and around powers of two, `n = 0`, `n = 1`, the first and last element, the empty range at the very end.
 - **Include a non-commutative case.** String concatenation turns a reversed fold into a reversed string; sum, min and max would hide it.
-- **Cover both directions of every check.** What must throw, and what must not — a check that is too eager is as much of a bug as a missing one.
 - **Carry a couple of large deterministic cases**, `n` around 1e3, generated from a fixed seed and verified against the quadratic reference.
 - **Be deterministic.** Counter-based splitmix64 with a fixed seed, no `std` distributions. A failure must reproduce byte for byte on any machine.
 - **Say where it failed.** Every check carries the size and the indices involved, so a failure names the case without a debugger.

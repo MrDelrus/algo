@@ -22,9 +22,7 @@
 namespace {
 
 using testing::check;
-using testing::check_does_not_throw;
 using testing::check_equal;
-using testing::check_throws;
 
 constexpr std::size_t exhaustive_limit = 32;
 constexpr std::uint64_t seed = 0xcbf29ce484222325ULL;
@@ -250,44 +248,6 @@ void non_commutative_order() {
   check_equal(tree.query(15, 20), std::string("pqrst"), "a range inside the right half");
 }
 
-void exception_paths() {
-  testing::section("exception paths");
-
-  ds::segment_tree_sum tree(std::vector<std::int64_t>{1, 2, 3, 4, 5});
-
-  check_throws<std::out_of_range>([&] { return tree.get(5); }, "get at n");
-  check_throws<std::out_of_range>([&] { return tree.get(6); }, "get past n");
-  check_throws<std::out_of_range>([&] { return tree.get(~std::size_t(0)); },
-                                  "get of a wrapped-around index");
-  check_throws<std::out_of_range>([&] { tree.set(5, 0); }, "set at n");
-  check_throws<std::out_of_range>([&] { tree.combine_at(5, 0); }, "combine_at at n");
-  check_throws<std::out_of_range>([&] { return tree.query(0, 6); }, "query reaching past n");
-  check_throws<std::out_of_range>([&] { return tree.query(6, 6); },
-                                  "empty query beyond the end is still out of range");
-  check_throws<std::out_of_range>([&] { return tree.query(4, 2); }, "reversed query");
-
-  ds::segment_tree_sum empty_tree;
-  check_throws<std::out_of_range>([&] { return empty_tree.get(0); }, "get on an empty tree");
-  check_throws<std::out_of_range>([&] { return empty_tree.query(0, 1); }, "query on an empty tree");
-
-  // The boundaries that must be accepted. A check that is too eager is as much of a bug as one
-  // that is missing.
-  check_does_not_throw([&] { return tree.query(5, 5); }, "empty range exactly at the end");
-  check_does_not_throw([&] { return tree.query(0, 5); }, "the full range");
-  check_does_not_throw([&] { return tree.query(2, 2); }, "an empty range in the middle");
-  check_does_not_throw([&] { return tree.get(4); }, "the last valid position");
-  check_does_not_throw([&] { tree.set(4, 0); }, "set at the last valid position");
-  check_does_not_throw([&] { return empty_tree.query(0, 0); }, "the empty range on an empty tree");
-
-  // A rejected call must leave the structure untouched.
-  ds::segment_tree_sum guarded(std::vector<std::int64_t>{1, 2, 3});
-  try {
-    guarded.set(3, 100);
-  } catch (const std::out_of_range&) {
-  }
-  check_equal(guarded.query_all(), std::int64_t(6), "a rejected set changes nothing");
-}
-
 // Sizes near 1e3 from a deterministic generator, every answer checked against the obvious O(n)
 // scan, which makes the whole section quadratic.
 void large_against_quadratic() {
@@ -387,7 +347,6 @@ int main() {
   constructors_and_value_semantics();
   monoid_specific_behaviour();
   non_commutative_order();
-  exception_paths();
   large_against_quadratic();
 
   return testing::summarize("segment_tree") == 0 ? 0 : 1;

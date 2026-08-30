@@ -33,7 +33,7 @@ Vertices are **0-indexed**.
 | `get_component_size(vertex)` | How many vertices are in this vertex's component. |
 | `get_component_count()` | How many components remain. |
 
-All of them throw `std::out_of_range` for a vertex at or past `n`. The default constructor gives an empty structure with no vertices at all.
+A vertex at or past `n` is **undefined behaviour** — nothing is checked, as in `std::vector::operator[]`. The default constructor gives an empty structure with no vertices at all.
 
 ## Traps
 
@@ -50,6 +50,7 @@ All of them throw `std::out_of_range` for a vertex at or past `n`. The default c
 - **An ancestor is an unspecified vertex of its component** — not the smallest, not the first inserted — and it changes as merges happen. Guaranteed: it belongs to the component, it is its own ancestor, and two vertices share one exactly when connected. Do not store it across a `merge`.
 - **Queries are `const`** despite rewriting paths internally, so the structure can be passed as `const&`.
 - **There is no split.** Undoing a merge requires giving up path compression.
+- An out-of-range vertex indexes past the parent vector, so a sanitizer build does report it.
 
 ## Related
 

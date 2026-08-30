@@ -51,8 +51,8 @@ Once components exist, short aliases are declared in `main.cpp` below the librar
 - **0-indexed** everywhere unless a structure is inherently 1-indexed (Fenwick internals); the public API stays 0-indexed regardless.
 - **Comments are for invariants and complexity**, not for restating code. Each public component carries a one-line header comment: what it does plus its complexities.
 - **No `using namespace std;` inside `namespace algo`** — the library must survive being pasted anywhere. `main.cpp`'s top-level template already has it.
-- Prefer flat `std::vector` storage and indices over pointer-based nodes. No RTTI, no virtual dispatch.
-- **Structures validate their arguments and throw** `std::out_of_range` or `std::invalid_argument` on misuse. A satisfied check is one predicted branch; the message is built only on the failing path. Debugging an index bug at speed is worth far more than the branch costs.
+- Prefer flat `std::vector` storage and indices over pointer-based nodes. No RTTI, no virtual dispatch, no exceptions.
+- **Arguments are not validated.** Misuse is undefined behaviour, as it is throughout the standard library. Checks and their message strings cost space in a file with a hard character budget, and formal correctness is subordinate to size and speed here. Preconditions are stated on the component's documentation page instead.
 - Correctness first, then constant factor. A correctness invariant is never traded for speed without the trade being written down in the doc page's Notes.
 
 ## Markdown style
@@ -63,7 +63,7 @@ Paragraphs are single lines. Never hard-wrap prose at a column — let the edito
 
 Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named exactly after the component — `segment_tree.md`, matching the type it documents.
 
-Readers are assumed to know the data structures. A page describes **this implementation**: which variant and heuristics were used, the complexity of each operation, the memory it holds, what each operation does, the conventions it obeys (index base, half-open ranges, the meaning of a boolean return), what it throws, and the misuses that compile but misbehave.
+Readers are assumed to know the data structures. A page describes **this implementation**: which variant and heuristics were used, the complexity of each operation, the memory it holds, what each operation does, the conventions it obeys (index base, half-open ranges, the meaning of a boolean return), which arguments are undefined behaviour, and the misuses that compile but misbehave.
 
 A page does not explain how the structure works in general, and does not argue for the design. Rationale belongs in the pull request that established it.
 
@@ -75,7 +75,7 @@ Sections: **Summary**, **Implementation**, the API as tables of operations, **Tr
 
 A comment on a method states three things and stops: what it does, the conventions on what it takes and returns, and its complexity — marked amortised where that applies. Heuristics, storage layout and reasoning belong on the component's documentation page and are not repeated here.
 
-A component gets a header comment of two lines: what it is, the conventions it obeys, what it throws.
+A component gets a header comment of two lines: what it is and the conventions it obeys.
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 
@@ -87,7 +87,7 @@ One consequence to be honest about — **replacing an std component is on hold.*
 
 ## Tests
 
-`tests/` mirrors `docs/` too. Run them with `scripts/run_tests.sh`; everything compiles with ASan and UBSan. What a test file owes is in `tests/README.md` — the short version: check against an obvious reference, be exhaustive for `n <= 32`, hit the power-of-two boundaries, include a non-commutative monoid, cover what must throw *and* what must not, and carry a couple of deterministic cases at `n` near 1e3 verified against a quadratic reference.
+`tests/` mirrors `docs/` too. Run them with `scripts/run_tests.sh`; everything compiles with ASan and UBSan. What a test file owes is in `tests/README.md` — the short version: check against an obvious reference, be exhaustive for `n <= 32`, hit the power-of-two boundaries, include a non-commutative monoid, and carry a couple of deterministic cases at `n` near 1e3 verified against a quadratic reference. Misuse is undefined behaviour and is not tested.
 
 A component is unfinished without tests, exactly as it is unfinished without a doc page.
 

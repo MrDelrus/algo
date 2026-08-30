@@ -68,7 +68,7 @@ struct gcd_monoid {
 namespace segment_trees {
 
 // Point assignment, range fold over a monoid.
-// Positions 0-indexed, ranges half-open. Throws std::out_of_range outside the tree.
+// Positions 0-indexed, ranges half-open. Arguments outside the tree are undefined behaviour.
 template <typename monoid>
 class segment_tree {
  public:
@@ -95,13 +95,11 @@ class segment_tree {
 
   // The element at position. O(1).
   value_type get(std::size_t position) const {
-    check_position(position, "segment_tree::get");
     return _tree[_leaves + position];
   }
 
   // Assigns value, ignoring what was there. O(log n).
   void set(std::size_t position, const value_type& value) {
-    check_position(position, "segment_tree::set");
     std::size_t node = _leaves + position;
     _tree[node] = value;
     pull_up(node);
@@ -109,7 +107,6 @@ class segment_tree {
 
   // a[position] = combine(a[position], value). O(log n).
   void combine_at(std::size_t position, const value_type& value) {
-    check_position(position, "segment_tree::combine_at");
     std::size_t node = _leaves + position;
     _tree[node] = monoid::combine(_tree[node], value);
     pull_up(node);
@@ -117,7 +114,6 @@ class segment_tree {
 
   // Fold of [left, right); identity() when left == right. O(log n).
   value_type query(std::size_t left, std::size_t right) const {
-    check_range(left, right, "segment_tree::query");
     value_type from_left = monoid::identity();
     value_type from_right = monoid::identity();
     for (std::size_t low = left + _leaves, high = right + _leaves; low < high;
@@ -144,31 +140,6 @@ class segment_tree {
     return std::bit_ceil(size == 0 ? std::size_t(1) : size);
   }
 
-  [[noreturn]] static void reject_position(const char* where, std::size_t position,
-                                           std::size_t size) {
-    throw std::out_of_range(std::string(where) + ": position " + std::to_string(position) +
-                            " is out of range for a tree of size " + std::to_string(size));
-  }
-
-  [[noreturn]] static void reject_range(const char* where, std::size_t left, std::size_t right,
-                                        std::size_t size) {
-    throw std::out_of_range(std::string(where) + ": range [" + std::to_string(left) + ", " +
-                            std::to_string(right) + ") is not inside [0, " + std::to_string(size) +
-                            ")");
-  }
-
-  void check_position(std::size_t position, const char* where) const {
-    if (position >= _size) {
-      reject_position(where, position, _size);
-    }
-  }
-
-  void check_range(std::size_t left, std::size_t right, const char* where) const {
-    if (left > right || right > _size) {
-      reject_range(where, left, right, _size);
-    }
-  }
-
   void pull_up(std::size_t node) {
     while (node > 1) {
       node /= 2;
@@ -186,7 +157,7 @@ class segment_tree {
 namespace disjoint_set_unions {
 
 // A partition of 0 .. n - 1 under merging. Vertices 0-indexed.
-// Throws std::out_of_range outside the structure.
+// Vertices outside the structure are undefined behaviour.
 class disjoint_set_union {
  public:
   disjoint_set_union() = default;
@@ -202,14 +173,11 @@ class disjoint_set_union {
   // The component's representative. Which vertex is unspecified and changes on merges.
   // O(alpha(n)) amortised.
   std::size_t get_ancestor(std::size_t vertex) const {
-    check_vertex(vertex, "disjoint_set_union::get_ancestor");
     return find_root(vertex);
   }
 
   // Joins two components; false when they already shared one. O(alpha(n)) amortised.
   bool merge(std::size_t first, std::size_t second) {
-    check_vertex(first, "disjoint_set_union::merge");
-    check_vertex(second, "disjoint_set_union::merge");
     std::size_t first_root = find_root(first);
     std::size_t second_root = find_root(second);
     if (first_root == second_root) {
@@ -228,14 +196,11 @@ class disjoint_set_union {
 
   // Whether the two vertices share a component. O(alpha(n)) amortised.
   bool is_connected(std::size_t first, std::size_t second) const {
-    check_vertex(first, "disjoint_set_union::is_connected");
-    check_vertex(second, "disjoint_set_union::is_connected");
     return find_root(first) == find_root(second);
   }
 
   // Size of this vertex's component. O(alpha(n)) amortised.
   std::size_t get_component_size(std::size_t vertex) const {
-    check_vertex(vertex, "disjoint_set_union::get_component_size");
     return _component_size[find_root(vertex)];
   }
 
@@ -256,17 +221,6 @@ class disjoint_set_union {
       vertex = next;
     }
     return root;
-  }
-
-  [[noreturn]] static void reject_vertex(const char* where, std::size_t vertex, std::size_t size) {
-    throw std::out_of_range(std::string(where) + ": vertex " + std::to_string(vertex) +
-                            " is out of range for a structure of size " + std::to_string(size));
-  }
-
-  void check_vertex(std::size_t vertex, const char* where) const {
-    if (vertex >= _parent.size()) {
-      reject_vertex(where, vertex, _parent.size());
-    }
   }
 
   mutable std::vector<std::size_t> _parent;
