@@ -35,7 +35,7 @@ Shared vocabulary — monoids and anything else several families consume — sta
 
 **Aliases are declared last**, after every family namespace in the area is closed, gathered in one block. That block is the list of what the library actually offers, and keeping it in one place is the point.
 
-Once components exist, short aliases are declared in `main.cpp` below the library block with `namespace gr = algo::graphs;` and `namespace ds = algo::data_structures;` — namespace aliases need `namespace`, not `using`.
+Short aliases are declared in `main.cpp` below the library block: `namespace gr = algo::graphs;` and `namespace ds = algo::data_structures;`. Namespace aliases need `namespace`, not `using`. `scripts/extract_library.sh` writes both into the generated header, so tests name the library the same way a submission does.
 
 ## Code conventions
 
