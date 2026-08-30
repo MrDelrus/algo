@@ -44,7 +44,9 @@ Once components exist, short aliases are declared in `main.cpp` below the librar
 - **Self-contained**: a component must compile after copy-pasting it plus its declared dependencies. Dependencies are stated explicitly in the doc page.
 - **Formatting**: clang-format, Google style, two-space indent, via `scripts/format.sh`. The tracked `.clang-format` is authoritative.
 - **`snake_case` for everything**: classes, methods, free functions, namespaces, variables, constants. No PascalCase in the library — it reads like std. Private members carry a **leading** underscore (`_data`, `_size`). Template parameters are descriptive and lowercase (`value_type`, `operation`), never single letters.
-- **No abbreviations, anywhere**: `segment_tree` not `seg_tree`, `fenwick` not `bit`, `left`/`right` not `l`/`r`. Applies to types, methods, parameters, and locals alike. The `main.cpp` competitive template (`all`, `pb`, `eb`, `fast`, `ll`) is the sole exemption — it is round shorthand, not library code.
+- **No abbreviations, anywhere**: `segment_tree` not `seg_tree`, `fenwick` not `bit`, `left`/`right` not `l`/`r`. Applies to types, methods, parameters, and locals alike.
+- **The exemption list is closed, and extending it is the user's call.** Two entries. First, the `main.cpp` competitive template — `all`, `pb`, `eb`, `fast`, `ll` — which is round shorthand, not library code. Second, the operation suffix in an alias name — `sum`, `min`, `max`, `gcd` — as in `segment_tree_min`, and only in type names.
+- **Aliases put the operation last**: `segment_tree_min`, not `min_segment_tree`. Everything for one structure then sorts together.
 - **Built-in integer types are banned in the library**: no `int`, no `long long`, no `unsigned`. Use `std::int64_t` by default, `std::int32_t` only where the bound is proven and memory matters, `std::size_t` for sizes, `std::uint64_t` for hashing and bit manipulation.
 - **0-indexed** everywhere unless a structure is inherently 1-indexed (Fenwick internals); the public API stays 0-indexed regardless.
 - **Comments are for invariants and complexity**, not for restating code. Each public component carries a one-line header comment: what it does plus its complexities.
@@ -59,14 +61,15 @@ Paragraphs are single lines. Never hard-wrap prose at a column — let the edito
 
 ## Documentation
 
-Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named exactly after the component — `segment_tree.md`, matching the type it documents — with these sections:
+Every component has one Markdown page under `docs/graphs/` or `docs/structures/`, named exactly after the component — `segment_tree.md`, matching the type it documents.
 
-1. **Summary** — one sentence.
-2. **Complexity** — build / query / update, time and memory.
-3. **API** — signatures with parameter semantics and index conventions.
-4. **Usage** — a short, real snippet.
-5. **Notes** — invariants, precision limits, overflow risks, when *not* to use it.
-6. **Related** — links to the index, tests, and the timing gate.
+**A page exists so the API can be recovered a year later, by someone who already knows how the structure works.** It answers "what did we call this and what does it do", not "what is a segment tree". So: what each operation does in a line, the conventions it obeys — index base, half-open ranges, what a boolean return means — what it throws, and the traps that bite at the call site. No complexity tables, no explanation of the algorithm, no reasoning about design.
+
+Sections: **Summary**, the API as tables of operations, **Traps**, **Related**. Forty to sixty lines is normal; past a hundred, something has leaked in that belongs elsewhere.
+
+Rationale — why this structure, what was measured, what was rejected — goes to `docs/README.md` if it is worth keeping at all, and the argument behind a decision lives in the pull request that made it.
+
+The same restraint applies to comments in `main.cpp`. A component gets two or three lines: what it does, the conventions it obeys, what it throws. Not the reasoning.
 
 A component without a doc page is unfinished. Changing a component means updating its page in the same pass, and adding one means adding its row to `docs/README.md`.
 

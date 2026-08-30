@@ -18,8 +18,8 @@ namespace algo {
 
 namespace data_structures {
 
-// A monoid supplies an associative combine and a two-sided identity.
-// Commutativity is not required: every structure that folds a range keeps operand order.
+// A monoid: an associative combine and a two-sided identity. Commutativity is not required —
+// every structure that folds a range keeps operand order.
 
 template <typename value>
 struct sum_monoid {
@@ -67,18 +67,8 @@ struct gcd_monoid {
 
 namespace segment_trees {
 
-// Point assignment, range fold over an arbitrary monoid.
-// Build O(n), get O(1), set O(log n), combine_at O(log n), query O(log n), query_all O(1).
-// Memory 2 * ceil_pow2(n) values.
-//
-// The leaf count is rounded up to a power of two. Padding leaves hold identity(), which is why
-// query(0, n) and query_all() agree.
-//
-// Ancestors are always recomputed from their two children, never patched in place. That is
-// what lets combine_at work for operations with no inverse, min and max among them.
-//
-// Every entry point validates its arguments and throws std::out_of_range on misuse.
-// A satisfied check is one predicted branch.
+// Point assignment, range fold over a monoid. Positions 0-indexed, ranges half-open.
+// Throws std::out_of_range on a position or range outside the tree.
 template <typename monoid>
 class segment_tree {
  public:
@@ -149,8 +139,7 @@ class segment_tree {
     return std::bit_ceil(size == 0 ? std::size_t(1) : size);
   }
 
-  // Precondition checks. Building the message happens only on the failing path, so a
-  // satisfied check costs one perfectly predicted branch.
+  // The message is built only on the failing path, so a satisfied check is one branch.
   [[noreturn]] static void reject_position(const char* where, std::size_t position,
                                            std::size_t size) {
     throw std::out_of_range(std::string(where) + ": position " + std::to_string(position) +
@@ -192,18 +181,9 @@ class segment_tree {
 
 namespace disjoint_set_unions {
 
-// Disjoint set union with union by size and full path compression.
-// Construction O(n), every query and merge O(alpha(n)) amortised. Memory 2n values.
-//
-// Union by size rather than by rank: the bound is identical, both keep tree height O(log n)
-// before compression, but a size is something problems ask for and a rank is not. After
-// compression a rank stops being a real height anyway, while a size stays exact.
-//
-// get_ancestor rewrites the path it walks, yet it is const. Compression changes how the same
-// partition is stored, never which partition it is, so it is invisible in the mathematical
-// model the class presents. The storage is mutable for exactly that reason.
-//
-// Every entry point validates its arguments and throws std::out_of_range on misuse.
+// Disjoint set union with union by size and full path compression. Vertices 0-indexed.
+// Queries are const and still compress, so the storage is mutable.
+// Throws std::out_of_range on a vertex outside the structure.
 class disjoint_set_union {
  public:
   disjoint_set_union() = default;
@@ -220,8 +200,7 @@ class disjoint_set_union {
     return find_root(vertex);
   }
 
-  // Joins the two components. Returns false when the vertices already shared one, which is what
-  // tells Kruskal that an edge closes a cycle.
+  // Returns false when the vertices already shared a component — Kruskal's cycle test.
   bool merge(std::size_t first, std::size_t second) {
     check_vertex(first, "disjoint_set_union::merge");
     check_vertex(second, "disjoint_set_union::merge");
@@ -257,9 +236,7 @@ class disjoint_set_union {
   }
 
  private:
-  // Two passes: walk up to the root, then walk the same path again attaching every vertex
-  // straight to it. No recursion — a path can be as long as the structure is wide, and a
-  // Codeforces stack does not survive that.
+  // Two passes, no recursion: find the root, then reattach the whole path to it.
   std::size_t find_root(std::size_t vertex) const {
     std::size_t root = vertex;
     while (_parent[root] != root) {
@@ -291,13 +268,13 @@ class disjoint_set_union {
 
 }  // namespace disjoint_set_unions
 
-// Every structure the library offers, gathered in one place. Reach past an alias only for a
-// monoid that has no preset: ds::segment_trees::segment_tree<my_monoid>.
+// Everything the library offers. Name the core only for a monoid with no preset here:
+// ds::segment_trees::segment_tree<my_monoid>.
 
-using sum_segment_tree = segment_trees::segment_tree<sum_monoid<std::int64_t>>;
-using min_segment_tree = segment_trees::segment_tree<min_monoid<std::int64_t>>;
-using max_segment_tree = segment_trees::segment_tree<max_monoid<std::int64_t>>;
-using gcd_segment_tree = segment_trees::segment_tree<gcd_monoid<std::int64_t>>;
+using segment_tree_sum = segment_trees::segment_tree<sum_monoid<std::int64_t>>;
+using segment_tree_min = segment_trees::segment_tree<min_monoid<std::int64_t>>;
+using segment_tree_max = segment_trees::segment_tree<max_monoid<std::int64_t>>;
+using segment_tree_gcd = segment_trees::segment_tree<gcd_monoid<std::int64_t>>;
 
 using disjoint_set_union = disjoint_set_unions::disjoint_set_union;
 

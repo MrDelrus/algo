@@ -122,7 +122,7 @@ void padding_boundaries() {
     for (std::size_t index = 0; index < size; ++index) {
       values[index] = static_cast<std::int64_t>(source.below(1000));
     }
-    ds::sum_segment_tree tree(values);
+    ds::segment_tree_sum tree(values);
 
     check_equal(tree.query(0, size), std::accumulate(values.begin(), values.end(), std::int64_t(0)),
                 "full range at n=" + std::to_string(size));
@@ -147,7 +147,7 @@ void padding_boundaries() {
                 "sum after setting the first element, n=" + std::to_string(size));
 
     // Padding leaves hold identity, so a min tree must never report one of them.
-    ds::min_segment_tree minimums(values);
+    ds::segment_tree_min minimums(values);
     check_equal(minimums.query(0, size), *std::min_element(values.begin(), values.end()),
                 "min over the full range, n=" + std::to_string(size));
     check_equal(minimums.query_all(), *std::min_element(values.begin(), values.end()),
@@ -158,36 +158,36 @@ void padding_boundaries() {
 void constructors_and_value_semantics() {
   testing::section("constructors and value semantics");
 
-  ds::sum_segment_tree empty_tree;
+  ds::segment_tree_sum empty_tree;
   check_equal(empty_tree.query_all(), std::int64_t(0), "default constructed folds to identity");
   check_equal(empty_tree.query(0, 0), std::int64_t(0), "default constructed accepts empty range");
 
-  ds::sum_segment_tree sized(5);
+  ds::segment_tree_sum sized(5);
   check_equal(sized.query_all(), std::int64_t(0), "size constructor fills with identity");
   for (std::size_t position = 0; position < 5; ++position) {
     check_equal(sized.get(position), std::int64_t(0), "size constructor element is identity");
   }
 
-  ds::min_segment_tree sized_minimums(4);
+  ds::segment_tree_min sized_minimums(4);
   check_equal(sized_minimums.query_all(), std::numeric_limits<std::int64_t>::max(),
               "min tree fills with its own identity, not zero");
 
-  ds::max_segment_tree sized_maximums(4);
+  ds::segment_tree_max sized_maximums(4);
   check_equal(sized_maximums.query_all(), std::numeric_limits<std::int64_t>::lowest(),
               "max tree fills with its own identity");
 
-  ds::sum_segment_tree zero_sized(0);
+  ds::segment_tree_sum zero_sized(0);
   check_equal(zero_sized.query_all(), std::int64_t(0), "explicit size zero folds to identity");
   check_equal(zero_sized.query(0, 0), std::int64_t(0), "explicit size zero accepts empty range");
 
   // A copy must be independent: mutating one tree must not reach the other.
-  ds::sum_segment_tree original(std::vector<std::int64_t>{1, 2, 3, 4});
-  ds::sum_segment_tree copy = original;
+  ds::segment_tree_sum original(std::vector<std::int64_t>{1, 2, 3, 4});
+  ds::segment_tree_sum copy = original;
   copy.set(0, 100);
   check_equal(original.query_all(), std::int64_t(10), "the original is untouched by its copy");
   check_equal(copy.query_all(), std::int64_t(109), "the copy carries its own change");
 
-  ds::sum_segment_tree moved = std::move(copy);
+  ds::segment_tree_sum moved = std::move(copy);
   check_equal(moved.query_all(), std::int64_t(109), "a moved-from tree hands over its contents");
 }
 
@@ -196,7 +196,7 @@ void monoid_specific_behaviour() {
 
   std::vector<std::int64_t> values = {5, 1, 9, 3, 7};
 
-  ds::min_segment_tree minimums(values);
+  ds::segment_tree_min minimums(values);
   check_equal(minimums.query(1, 4), std::int64_t(1), "min over a middle range");
   minimums.combine_at(1, 4);
   check_equal(minimums.get(1), std::int64_t(1), "combine_at on a min tree never raises a value");
@@ -206,17 +206,17 @@ void monoid_specific_behaviour() {
   check_equal(minimums.get(1), std::int64_t(100), "set on a min tree assigns regardless");
   check_equal(minimums.query_all(), std::int64_t(3), "the root follows a raising set");
 
-  ds::max_segment_tree maximums(values);
+  ds::segment_tree_max maximums(values);
   check_equal(maximums.query(0, 3), std::int64_t(9), "max over a prefix");
   maximums.combine_at(0, 2);
   check_equal(maximums.get(0), std::int64_t(5), "combine_at on a max tree never lowers a value");
 
-  ds::gcd_segment_tree divisors(std::vector<std::int64_t>{12, 18, 24});
+  ds::segment_tree_gcd divisors(std::vector<std::int64_t>{12, 18, 24});
   check_equal(divisors.query_all(), std::int64_t(6), "gcd of the whole array");
   check_equal(divisors.query(0, 1), std::int64_t(12), "gcd of one element is that element");
   check_equal(divisors.query(1, 1), std::int64_t(0), "gcd of nothing is the identity");
 
-  ds::sum_segment_tree sums(values);
+  ds::segment_tree_sum sums(values);
   sums.combine_at(2, 100);
   check_equal(sums.get(2), std::int64_t(109), "combine_at on a sum tree adds");
   check_equal(sums.query_all(), std::int64_t(125), "the root follows combine_at");
@@ -253,7 +253,7 @@ void non_commutative_order() {
 void exception_paths() {
   testing::section("exception paths");
 
-  ds::sum_segment_tree tree(std::vector<std::int64_t>{1, 2, 3, 4, 5});
+  ds::segment_tree_sum tree(std::vector<std::int64_t>{1, 2, 3, 4, 5});
 
   check_throws<std::out_of_range>([&] { return tree.get(5); }, "get at n");
   check_throws<std::out_of_range>([&] { return tree.get(6); }, "get past n");
@@ -266,7 +266,7 @@ void exception_paths() {
                                   "empty query beyond the end is still out of range");
   check_throws<std::out_of_range>([&] { return tree.query(4, 2); }, "reversed query");
 
-  ds::sum_segment_tree empty_tree;
+  ds::segment_tree_sum empty_tree;
   check_throws<std::out_of_range>([&] { return empty_tree.get(0); }, "get on an empty tree");
   check_throws<std::out_of_range>([&] { return empty_tree.query(0, 1); }, "query on an empty tree");
 
@@ -280,7 +280,7 @@ void exception_paths() {
   check_does_not_throw([&] { return empty_tree.query(0, 0); }, "the empty range on an empty tree");
 
   // A rejected call must leave the structure untouched.
-  ds::sum_segment_tree guarded(std::vector<std::int64_t>{1, 2, 3});
+  ds::segment_tree_sum guarded(std::vector<std::int64_t>{1, 2, 3});
   try {
     guarded.set(3, 100);
   } catch (const std::out_of_range&) {
@@ -301,9 +301,9 @@ void large_against_quadratic() {
       values[index] = static_cast<std::int64_t>(source.below(2000)) - 1000;
     }
 
-    ds::sum_segment_tree sums(values);
-    ds::min_segment_tree minimums(values);
-    ds::max_segment_tree maximums(values);
+    ds::segment_tree_sum sums(values);
+    ds::segment_tree_min minimums(values);
+    ds::segment_tree_max maximums(values);
 
     for (std::size_t round = 0; round < 500; ++round) {
       std::size_t choice = source.below(3);
