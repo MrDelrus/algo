@@ -230,6 +230,25 @@ class disjoint_set_union {
 
 }  // namespace disjoint_set_unions
 
+// Priority queues: heap_min keeps the smallest element on top, heap_max the largest.
+template <typename value_type>
+using heap_min = std::priority_queue<value_type, std::vector<value_type>, std::greater<value_type>>;
+template <typename value_type>
+using heap_max = std::priority_queue<value_type>;
+
+// A heap holding values, built in O(n). heapify(values) is a heap_min,
+// heapify<heap_max>(values) a heap_max.
+template <template <typename> class heap_kind = heap_min, typename value_type>
+heap_kind<value_type> heapify(const std::vector<value_type>& values) {
+  return heap_kind<value_type>(values.begin(), values.end());
+}
+
+// Takes ownership of values. O(n).
+template <template <typename> class heap_kind = heap_min, typename value_type>
+heap_kind<value_type> heapify(std::vector<value_type>&& values) {
+  return heap_kind<value_type>(typename heap_kind<value_type>::value_compare(), std::move(values));
+}
+
 // Everything the library offers. Name the core only for a monoid with no preset here:
 // ds::segment_trees::segment_tree<my_monoid>.
 

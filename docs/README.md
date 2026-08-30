@@ -6,6 +6,7 @@ One page per component, describing that implementation for a reader who already 
 
 | Component | Documentation | Tests |
 | --- | --- | --- |
+| `heap_min`, `heap_max`, `heapify` | [structures/heap.md](structures/heap.md) | [source](../tests/structures/heap.cpp) |
 | `disjoint_set_union` | [structures/disjoint_set_union.md](structures/disjoint_set_union.md) | [source](../tests/structures/disjoint_set_union.cpp) |
 | `segment_tree` | [structures/segment_tree.md](structures/segment_tree.md) | [source](../tests/structures/segment_tree.cpp) |
 
