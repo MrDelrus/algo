@@ -73,7 +73,7 @@ Sections: **Summary**, **Implementation**, the API as tables of operations, **Tr
 
 `main.cpp` is submitted whole, and Codeforces accepts at most 65 000 characters. The library keeps to 50 000, so space there is budgeted rather than spent freely.
 
-A comment on a method states three things and stops: what it does, the conventions on what it takes and returns, and its complexity — marked amortised where that applies. Heuristics, storage layout and reasoning belong on the component's documentation page and are not repeated here.
+A comment on a method states three things and stops: what it does, the conventions on what it takes and returns, and its complexity — marked amortised where that applies. It describes this API and nothing else: no heuristics, no storage layout, no motivation, and no comparison with what the standard library does. Those belong on the component's documentation page.
 
 A component gets a header comment of two lines: what it is and the conventions it obeys.
 
