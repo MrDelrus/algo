@@ -272,6 +272,10 @@ using graph_weighted = std::vector<std::vector<std::pair<std::int64_t, std::int6
 // The distance reported for a vertex no path reaches.
 inline constexpr std::int64_t unreachable = std::numeric_limits<std::int64_t>::max();
 
+// The distance reported where paths exist but no shortest one does, because a negative cycle
+// lies on the way. Only bellman_ford reports it.
+inline constexpr std::int64_t unbounded_negative = std::numeric_limits<std::int64_t>::min();
+
 namespace detail {
 
 inline std::pair<std::int64_t, std::int64_t> as_edge(std::int64_t destination) {
@@ -342,15 +346,18 @@ std::int64_t dijkstra(const graph_type& edges, std::int64_t start, std::int64_t 
   return unreachable;
 }
 
-// Distances from start, admitting negative weights; unreachable where no path exists. Returns
-// an empty vector when a negative cycle is reachable from start. Edges of a graph weigh one.
-// O(n * m).
+// Distances from start, admitting negative weights. A vertex is unreachable where no path
+// exists, and unbounded_negative where one exists but no shortest one does, a negative cycle lying
+// on the way. Edges of a graph weigh one. O(n * m).
 template <typename graph_type>
 std::vector<std::int64_t> bellman_ford(const graph_type& edges, std::int64_t start) {
   std::vector<std::int64_t> distance(edges.size(), unreachable);
+  if (edges.empty()) {
+    return distance;
+  }
   distance[static_cast<std::size_t>(start)] = 0;
 
-  for (std::size_t pass = 0; pass <= edges.size(); ++pass) {
+  for (std::size_t pass = 0; pass + 1 < edges.size(); ++pass) {
     bool relaxed = false;
     for (std::size_t vertex = 0; vertex < edges.size(); ++vertex) {
       if (distance[vertex] == unreachable) {
@@ -368,19 +375,45 @@ std::vector<std::int64_t> bellman_ford(const graph_type& edges, std::int64_t sta
     if (!relaxed) {
       return distance;
     }
-    if (pass == edges.size()) {
-      return {};
+  }
+
+  // Whatever still relaxes after n - 1 passes sits on a negative cycle, and so does everything
+  // the cycle can reach.
+  std::vector<std::int64_t> pending;
+  for (std::size_t vertex = 0; vertex < edges.size(); ++vertex) {
+    if (distance[vertex] == unreachable) {
+      continue;
+    }
+    for (const auto& neighbour : edges[vertex]) {
+      auto [destination, weight] = detail::as_edge(neighbour);
+      if (distance[vertex] + weight < distance[static_cast<std::size_t>(destination)]) {
+        pending.push_back(destination);
+      }
+    }
+  }
+  for (std::int64_t vertex : pending) {
+    distance[static_cast<std::size_t>(vertex)] = unbounded_negative;
+  }
+  while (!pending.empty()) {
+    std::int64_t vertex = pending.back();
+    pending.pop_back();
+    for (const auto& neighbour : edges[static_cast<std::size_t>(vertex)]) {
+      auto [destination, weight] = detail::as_edge(neighbour);
+      static_cast<void>(weight);
+      if (distance[static_cast<std::size_t>(destination)] != unbounded_negative) {
+        distance[static_cast<std::size_t>(destination)] = unbounded_negative;
+        pending.push_back(destination);
+      }
     }
   }
   return distance;
 }
 
-// The distance from start to finish alone; unreachable when no path exists, and unreachable
-// when a negative cycle is reachable from start. O(n * m).
+// The distance from start to finish alone: unreachable, unbounded_negative, or the length.
+// O(n * m).
 template <typename graph_type>
 std::int64_t bellman_ford(const graph_type& edges, std::int64_t start, std::int64_t finish) {
-  std::vector<std::int64_t> distance = bellman_ford(edges, start);
-  return distance.empty() ? unreachable : distance[static_cast<std::size_t>(finish)];
+  return bellman_ford(edges, start)[static_cast<std::size_t>(finish)];
 }
 
 // A component index per vertex, from 0 to the number of components minus one. Two vertices

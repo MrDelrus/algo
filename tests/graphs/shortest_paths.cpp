@@ -21,6 +21,7 @@ using testing::check_equal;
 
 constexpr std::uint64_t seed = 0xa5a5a5a5deadbeefULL;
 constexpr std::int64_t none = gr::unreachable;
+constexpr std::int64_t below = gr::unbounded_negative;
 
 std::string at(std::size_t size, std::size_t from, std::size_t to) {
   return "n=" + std::to_string(size) + " " + std::to_string(from) + "->" + std::to_string(to);
@@ -174,11 +175,8 @@ void bellman_ford_against_floyd_warshall() {
       for (std::size_t start = 0; start < size; ++start) {
         std::vector<std::int64_t> distance =
             gr::bellman_ford(edges, static_cast<std::int64_t>(start));
-        check(!distance.empty(), "no negative cycle is reported where none exists");
-        if (distance.empty()) {
-          continue;
-        }
         for (std::size_t finish = 0; finish < size; ++finish) {
+          check(distance[finish] != below, "nothing is unbounded where no negative cycle exists");
           check_equal(distance[finish], expected[start][finish],
                       "bellman-ford " + at(size, start, finish));
           check_equal(gr::bellman_ford(edges, static_cast<std::int64_t>(start),
@@ -190,45 +188,128 @@ void bellman_ford_against_floyd_warshall() {
   }
 }
 
-void negative_cycles() {
-  testing::section("negative cycles");
+// With a negative cycle in reach, a shortest path stops existing for every vertex the cycle can
+// reach. The reference works that out from Floyd-Warshall: a vertex sits on a negative cycle
+// when best[v][v] < 0, and the affected set is everything such a vertex reaches, provided the
+// start reaches it in the first place.
+std::vector<std::int64_t> classify(const gr::graph_weighted& edges, std::size_t start) {
+  std::size_t size = edges.size();
+  std::vector<std::vector<std::int64_t>> best = floyd_warshall(edges);
+  gr::graph plain(size);
+  for (std::size_t vertex = 0; vertex < size; ++vertex) {
+    for (const auto& [destination, weight] : edges[vertex]) {
+      static_cast<void>(weight);
+      plain[vertex].push_back(destination);
+    }
+  }
+  std::vector<std::vector<bool>> reaches = reachability(plain);
+
+  std::vector<std::int64_t> expected(size, none);
+  for (std::size_t finish = 0; finish < size; ++finish) {
+    if (!reaches[start][finish]) {
+      continue;
+    }
+    bool affected = false;
+    for (std::size_t cycle = 0; cycle < size; ++cycle) {
+      if (best[cycle][cycle] < 0 && reaches[start][cycle] && reaches[cycle][finish]) {
+        affected = true;
+      }
+    }
+    expected[finish] = affected ? below : best[start][finish];
+  }
+  return expected;
+}
+
+void negative_cycles_against_the_classification() {
+  testing::section("negative cycles against the classification");
+  testing::random_source source(seed ^ 0x5555555555555555ULL);
+
+  for (std::size_t size = 1; size <= 7; ++size) {
+    for (std::size_t attempt = 0; attempt < 40; ++attempt) {
+      // Unconstrained negative weights, so negative cycles appear on their own.
+      gr::graph_weighted edges(size);
+      for (std::size_t from = 0; from < size; ++from) {
+        for (std::size_t to = 0; to < size; ++to) {
+          if (source.below(10) < 3) {
+            edges[from].emplace_back(static_cast<std::int64_t>(to),
+                                     static_cast<std::int64_t>(source.below(11)) - 5);
+          }
+        }
+      }
+
+      for (std::size_t start = 0; start < size; ++start) {
+        std::vector<std::int64_t> distance =
+            gr::bellman_ford(edges, static_cast<std::int64_t>(start));
+        std::vector<std::int64_t> expected = classify(edges, start);
+        for (std::size_t finish = 0; finish < size; ++finish) {
+          check_equal(distance[finish], expected[finish],
+                      "bellman-ford classifies " + at(size, start, finish));
+          check_equal(gr::bellman_ford(edges, static_cast<std::int64_t>(start),
+                                       static_cast<std::int64_t>(finish)),
+                      expected[finish], "and its single-distance form " + at(size, start, finish));
+        }
+      }
+    }
+  }
+}
+
+void negative_cycles_by_hand() {
+  testing::section("negative cycles by hand");
 
   {
-    gr::graph_weighted edges(3);
-    edges[0] = {{1, 1}};
-    edges[1] = {{2, -1}};
-    edges[2] = {{1, -1}};
-    check(gr::bellman_ford(edges, 0).empty(), "a reachable negative cycle reports empty");
-    check_equal(gr::bellman_ford(edges, 0, 2), none, "and the single-distance form says nothing");
+    // 0 -> 1 -> cycle{2,3,4}, and 5 hangs off the cycle. 6 reaches the start but is not reached.
+    gr::graph_weighted edges(7);
+    edges[0] = {{1, 10}};
+    edges[1] = {{2, 1}};
+    edges[2] = {{3, -1}};
+    edges[3] = {{4, -1}};
+    edges[4] = {{2, -1}, {5, 7}};
+    edges[6] = {{0, 1}};
+    std::vector<std::int64_t> distance = gr::bellman_ford(edges, 0);
+    check_equal(distance[0], std::int64_t(0), "the start before the cycle keeps its distance");
+    check_equal(distance[1], std::int64_t(10), "and so does the vertex before it");
+    check_equal(distance[2], below, "a vertex on the cycle is unbounded");
+    check_equal(distance[4], below, "all of it");
+    check_equal(distance[5], below, "and what hangs off it");
+    check_equal(distance[6], none, "a vertex the start cannot reach stays unreachable");
   }
   {
-    // The cycle exists but nothing from the start reaches it, so the distances are well defined
-    // and must be returned.
+    // The cycle exists but nothing from the start reaches it.
     gr::graph_weighted edges(5);
     edges[0] = {{1, 7}};
     edges[2] = {{3, -1}};
     edges[3] = {{4, -1}};
     edges[4] = {{2, -1}};
     std::vector<std::int64_t> distance = gr::bellman_ford(edges, 0);
-    check(!distance.empty(), "an unreachable negative cycle is not reported");
-    check_equal(distance[0], std::int64_t(0), "the start is at zero");
-    check_equal(distance[1], std::int64_t(7), "and the reachable vertex is correct");
-    check_equal(distance[2], none, "the cycle's vertices stay unreachable");
+    check_equal(distance[0], std::int64_t(0), "an unreachable cycle changes nothing");
+    check_equal(distance[1], std::int64_t(7), "distances stay finite");
+    check_equal(distance[2], none, "and its vertices stay unreachable");
   }
   {
     // A negative self-loop is a negative cycle of length one.
     gr::graph_weighted edges(2);
-    edges[0] = {{1, 1}};
-    edges[1] = {{1, -1}};
-    check(gr::bellman_ford(edges, 0).empty(), "a negative self-loop is a negative cycle");
+    edges[0] = {{0, -1}, {1, 5}};
+    std::vector<std::int64_t> distance = gr::bellman_ford(edges, 0);
+    check_equal(distance[0], below, "a negative self-loop unbounds its own vertex");
+    check_equal(distance[1], below, "and everything after it");
   }
   {
-    // A zero-weight cycle is not negative and must not be reported.
+    // Zero is not negative.
     gr::graph_weighted edges(3);
     edges[0] = {{1, 1}};
     edges[1] = {{2, 0}};
     edges[2] = {{1, 0}};
-    check(!gr::bellman_ford(edges, 0).empty(), "a zero-weight cycle is not a negative cycle");
+    std::vector<std::int64_t> distance = gr::bellman_ford(edges, 0);
+    check_equal(distance[1], std::int64_t(1), "a zero-weight cycle leaves distances finite");
+    check_equal(distance[2], std::int64_t(1), "throughout");
+  }
+  {
+    // A single negative edge, no cycle at all.
+    gr::graph_weighted edges(3);
+    edges[0] = {{1, 5}};
+    edges[1] = {{2, -3}};
+    std::vector<std::int64_t> distance = gr::bellman_ford(edges, 0);
+    check_equal(distance[2], std::int64_t(2), "negative weights alone are fine");
   }
 }
 
@@ -420,7 +501,6 @@ void the_two_algorithms_agree_at_scale() {
   for (std::int64_t start : {std::int64_t(0), std::int64_t(7), std::int64_t(299)}) {
     std::vector<std::int64_t> fast = gr::dijkstra(edges, start);
     std::vector<std::int64_t> slow = gr::bellman_ford(edges, start);
-    check(!slow.empty(), "no negative cycle with non-negative weights");
     for (std::size_t finish = 0; finish < size; ++finish) {
       check_equal(fast[finish], slow[finish],
                   "dijkstra and bellman-ford agree, start=" + std::to_string(start) +
@@ -436,7 +516,8 @@ void the_two_algorithms_agree_at_scale() {
 int main() {
   dijkstra_against_floyd_warshall();
   bellman_ford_against_floyd_warshall();
-  negative_cycles();
+  negative_cycles_against_the_classification();
+  negative_cycles_by_hand();
   unweighted_graphs_count_edges();
   degenerate_inputs();
   components_against_reachability();

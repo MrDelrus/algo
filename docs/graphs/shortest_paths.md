@@ -14,7 +14,12 @@ edges[from].emplace_back(to, weight);
 
 Vertices are `0 .. n - 1`, and `n` is `edges.size()`. Both types are directed: an undirected edge is two entries. Weights and distances are `std::int64_t`.
 
-`gr::unreachable` is the distance reported where no path exists. It is `std::numeric_limits<std::int64_t>::max()`.
+Two sentinels stand in for distances that are not numbers:
+
+| | |
+| --- | --- |
+| `gr::unreachable` | No path exists. `std::numeric_limits<std::int64_t>::max()`. |
+| `gr::unbounded_negative` | A path exists but no shortest one does, a negative cycle lying on the way. `std::numeric_limits<std::int64_t>::min()`. Only `bellman_ford` reports it. |
 
 ## Distances
 
@@ -24,8 +29,8 @@ Every function takes either graph type. An edge of an unweighted `graph` weighs 
 | --- | --- |
 | `dijkstra(edges, start)` | Distances from `start`. **Weights must be non-negative.** O((n + m) log n). |
 | `dijkstra(edges, start, finish)` | The one distance, returning as soon as `finish` is settled. O((n + m) log n). |
-| `bellman_ford(edges, start)` | Distances from `start`, negative weights allowed. **Returns an empty vector when a negative cycle is reachable from `start`.** O(n · m). |
-| `bellman_ford(edges, start, finish)` | The one distance; `unreachable` when a negative cycle is reachable. O(n · m). |
+| `bellman_ford(edges, start)` | Distances from `start`, negative weights allowed. Every vertex gets an answer: a length, `unreachable`, or `unbounded_negative`. O(n · m). |
+| `bellman_ford(edges, start, finish)` | The one distance, in the same three forms. O(n · m). |
 
 ```cpp
 std::vector<std::int64_t> distance = gr::dijkstra(edges, 0);
@@ -34,7 +39,7 @@ if (distance[target] == gr::unreachable) { /* no path */ }
 std::int64_t answer = gr::dijkstra(edges, source, target);
 
 std::vector<std::int64_t> reached = gr::bellman_ford(edges, 0);
-if (reached.empty()) { /* negative cycle */ }
+if (reached[target] == gr::unbounded_negative) { /* a negative cycle lies on every path */ }
 ```
 
 ## Components
@@ -50,7 +55,7 @@ Components are numbered by the order of their smallest vertex: vertex 0 is alway
 ## Traps
 
 - **Dijkstra with a negative weight gives a wrong answer silently.** Nothing checks. Use `bellman_ford`.
-- **A negative cycle that `start` cannot reach is not reported**, and the distances returned are correct. Only a reachable one produces the empty vector.
+- **A negative cycle affects only what it can reach.** Vertices before it keep their true distances, vertices the cycle cannot reach are unaffected, and a cycle the start cannot reach changes nothing at all. Only the vertices reachable *through* such a cycle come back `unbounded_negative`.
 - **`get_components` is not strongly connected components.** On a directed graph it answers a question about neither direction.
 - **Distances are sums of `std::int64_t`.** A path whose total exceeds the range wraps; nothing checks.
 - On an unweighted graph `dijkstra` costs a logarithmic factor that a breadth-first search would not.
