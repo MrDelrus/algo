@@ -261,9 +261,163 @@ using disjoint_set_union = disjoint_set_unions::disjoint_set_union;
 
 }  // namespace data_structures
 
+namespace graphs {
+
+// Adjacency lists over vertices 0 .. n - 1.
+using graph = std::vector<std::vector<std::int64_t>>;
+
+// Adjacency lists carrying weights: each pair is (destination, weight).
+using graph_weighted = std::vector<std::vector<std::pair<std::int64_t, std::int64_t>>>;
+
+// The distance reported for a vertex no path reaches.
+inline constexpr std::int64_t unreachable = std::numeric_limits<std::int64_t>::max();
+
+namespace detail {
+
+inline std::pair<std::int64_t, std::int64_t> as_edge(std::int64_t destination) {
+  return {destination, 1};
+}
+
+inline std::pair<std::int64_t, std::int64_t> as_edge(
+    const std::pair<std::int64_t, std::int64_t>& edge) {
+  return edge;
+}
+
+}  // namespace detail
+
+// Distances from start; unreachable where no path exists. Edges of a graph weigh one.
+// Weights must be non-negative. O((n + m) log n).
+template <typename graph_type>
+std::vector<std::int64_t> dijkstra(const graph_type& edges, std::int64_t start) {
+  std::vector<std::int64_t> distance(edges.size(), unreachable);
+  distance[static_cast<std::size_t>(start)] = 0;
+  data_structures::heap_min<std::pair<std::int64_t, std::int64_t>> queue;
+  queue.emplace(0, start);
+
+  while (!queue.empty()) {
+    auto [reached, vertex] = queue.top();
+    queue.pop();
+    if (reached != distance[static_cast<std::size_t>(vertex)]) {
+      continue;
+    }
+    for (const auto& neighbour : edges[static_cast<std::size_t>(vertex)]) {
+      auto [destination, weight] = detail::as_edge(neighbour);
+      std::int64_t candidate = reached + weight;
+      if (candidate < distance[static_cast<std::size_t>(destination)]) {
+        distance[static_cast<std::size_t>(destination)] = candidate;
+        queue.emplace(candidate, destination);
+      }
+    }
+  }
+  return distance;
+}
+
+// The distance from start to finish alone, stopping as soon as it is settled; unreachable when
+// no path exists. Weights must be non-negative. O((n + m) log n).
+template <typename graph_type>
+std::int64_t dijkstra(const graph_type& edges, std::int64_t start, std::int64_t finish) {
+  std::vector<std::int64_t> distance(edges.size(), unreachable);
+  distance[static_cast<std::size_t>(start)] = 0;
+  data_structures::heap_min<std::pair<std::int64_t, std::int64_t>> queue;
+  queue.emplace(0, start);
+
+  while (!queue.empty()) {
+    auto [reached, vertex] = queue.top();
+    queue.pop();
+    if (vertex == finish) {
+      return reached;
+    }
+    if (reached != distance[static_cast<std::size_t>(vertex)]) {
+      continue;
+    }
+    for (const auto& neighbour : edges[static_cast<std::size_t>(vertex)]) {
+      auto [destination, weight] = detail::as_edge(neighbour);
+      std::int64_t candidate = reached + weight;
+      if (candidate < distance[static_cast<std::size_t>(destination)]) {
+        distance[static_cast<std::size_t>(destination)] = candidate;
+        queue.emplace(candidate, destination);
+      }
+    }
+  }
+  return unreachable;
+}
+
+// Distances from start, admitting negative weights; unreachable where no path exists. Returns
+// an empty vector when a negative cycle is reachable from start. Edges of a graph weigh one.
+// O(n * m).
+template <typename graph_type>
+std::vector<std::int64_t> bellman_ford(const graph_type& edges, std::int64_t start) {
+  std::vector<std::int64_t> distance(edges.size(), unreachable);
+  distance[static_cast<std::size_t>(start)] = 0;
+
+  for (std::size_t pass = 0; pass <= edges.size(); ++pass) {
+    bool relaxed = false;
+    for (std::size_t vertex = 0; vertex < edges.size(); ++vertex) {
+      if (distance[vertex] == unreachable) {
+        continue;
+      }
+      for (const auto& neighbour : edges[vertex]) {
+        auto [destination, weight] = detail::as_edge(neighbour);
+        std::int64_t candidate = distance[vertex] + weight;
+        if (candidate < distance[static_cast<std::size_t>(destination)]) {
+          distance[static_cast<std::size_t>(destination)] = candidate;
+          relaxed = true;
+        }
+      }
+    }
+    if (!relaxed) {
+      return distance;
+    }
+    if (pass == edges.size()) {
+      return {};
+    }
+  }
+  return distance;
+}
+
+// The distance from start to finish alone; unreachable when no path exists, and unreachable
+// when a negative cycle is reachable from start. O(n * m).
+template <typename graph_type>
+std::int64_t bellman_ford(const graph_type& edges, std::int64_t start, std::int64_t finish) {
+  std::vector<std::int64_t> distance = bellman_ford(edges, start);
+  return distance.empty() ? unreachable : distance[static_cast<std::size_t>(finish)];
+}
+
+// A component index per vertex, from 0 to the number of components minus one. Two vertices
+// share an index exactly when a path joins them, so edges are read as undirected. Components
+// are numbered by the order of their smallest vertex. O(n + m).
+inline std::vector<std::int64_t> get_components(const graph& edges) {
+  std::vector<std::int64_t> component(edges.size(), -1);
+  std::vector<std::int64_t> pending;
+  std::int64_t next = 0;
+
+  for (std::size_t root = 0; root < edges.size(); ++root) {
+    if (component[root] != -1) {
+      continue;
+    }
+    component[root] = next;
+    pending.push_back(static_cast<std::int64_t>(root));
+    while (!pending.empty()) {
+      std::int64_t vertex = pending.back();
+      pending.pop_back();
+      for (std::int64_t destination : edges[static_cast<std::size_t>(vertex)]) {
+        if (component[static_cast<std::size_t>(destination)] == -1) {
+          component[static_cast<std::size_t>(destination)] = next;
+          pending.push_back(destination);
+        }
+      }
+    }
+    ++next;
+  }
+  return component;
+}
+
+}  // namespace graphs
+
 }  // namespace algo
 
 namespace ds = algo::data_structures;
+namespace gr = algo::graphs;
 
 void solve() {
 

@@ -41,6 +41,7 @@ mkdir -p "$(dirname "$output")"
   sed -n "/^$(printf '%s' "$opening" | sed 's/[][\.*^$/]/\\&/g')\$/,/^$(printf '%s' "$closing" | sed 's/[][\.*^$/]/\\&/g')\$/p" main.cpp
   echo
   echo "namespace ds = algo::data_structures;"
+  echo "namespace gr = algo::graphs;"
 } > "$output"
 
 echo "wrote $output"

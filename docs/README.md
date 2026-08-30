@@ -14,7 +14,7 @@ One page per component, describing that implementation for a reader who already 
 
 | Component | Documentation | Tests |
 | --- | --- | --- |
-| _none yet_ | | |
+| `dijkstra`, `bellman_ford`, `get_components` | [graphs/shortest_paths.md](graphs/shortest_paths.md) | [source](../tests/graphs/shortest_paths.cpp) |
 
 ## Conventions
 
