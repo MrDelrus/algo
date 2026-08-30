@@ -22,7 +22,7 @@ All of them throw `std::out_of_range` for a vertex at or past `n`. The default c
 
 ## Traps
 
-- **The return of `merge` is the point.** It is Kruskal's cycle test with no second traversal:
+- **The return value of `merge` is Kruskal's cycle test**, with no second traversal:
 
   ```cpp
   for (auto [weight, from, to] : edges) {   // sorted by weight
@@ -32,9 +32,9 @@ All of them throw `std::out_of_range` for a vertex at or past `n`. The default c
   }
   ```
 
-- **An ancestor is an arbitrary vertex of its component** — not the smallest, not the first inserted. It changes as merges happen. All that is promised: it belongs to the component, it is its own ancestor, and two vertices share one exactly when connected. Do not store it across a `merge`.
-- **The queries are `const`** even though they rewrite paths internally, so the structure can be passed as `const&`.
-- **There is no split.** Undoing a merge would mean giving up path compression.
+- **An ancestor is an unspecified vertex of its component** — not the smallest, not the first inserted — and it changes as merges happen. Guaranteed: it belongs to the component, it is its own ancestor, and two vertices share one exactly when connected. Do not store it across a `merge`.
+- **Queries are `const`** despite rewriting paths internally, so the structure can be passed as `const&`.
+- **There is no split.** Undoing a merge requires giving up path compression.
 
 ## Related
 

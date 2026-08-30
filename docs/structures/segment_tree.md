@@ -23,17 +23,17 @@ Positions are **0-indexed**, ranges are **half-open** `[left, right)`.
 | --- | --- |
 | `get(position)` | The element there. |
 | `set(position, value)` | Assigns, ignoring what was there. |
-| `combine_at(position, value)` | `a[position] = combine(a[position], value)`. Adds in a sum tree, takes a minimum in a min tree. **This is the one to use for "add x at position i"** — `set` would overwrite. |
+| `combine_at(position, value)` | `a[position] = combine(a[position], value)`. Addition in a sum tree, a minimum in a min tree. Use it for "add x at position i"; `set` overwrites instead. |
 | `query(left, right)` | Fold of `[left, right)`. Returns `identity()` when `left == right`. |
 | `query_all()` | Fold of everything. Same answer as `query(0, n)`. |
 
 Everything throws `std::out_of_range` for a position at or past `n`, a range reaching past `n`, or a reversed range. `query(5, 5)` on a tree of five is legal; `query(4, 2)` is not.
 
-There is no `size()` — the size is fixed at construction and the caller already knows it.
+There is no `size()`. The size is fixed at construction.
 
 ## The monoid
 
-Three names, and that is the whole contract:
+The contract is three names:
 
 ```cpp
 template <typename value>
@@ -48,7 +48,7 @@ struct sum_monoid {
 
 Provided: `sum_monoid`, `min_monoid`, `max_monoid`, `gcd_monoid`, with identities `0`, `max()`, `lowest()`, `0`.
 
-**Operand order is preserved**, so a non-commutative `combine` — matrix products, "last write wins" — gives the answer the positions imply.
+**Operand order is preserved.** A non-commutative `combine`, such as matrix multiplication, folds in position order.
 
 ## Traps
 
