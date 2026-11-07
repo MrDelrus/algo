@@ -1,4 +1,3 @@
-// CF template, multiple tests
 // https://github.com/MrDelrus/algo
 #include <bits/stdc++.h>
 using namespace std;
